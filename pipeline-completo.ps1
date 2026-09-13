@@ -107,7 +107,7 @@ $grpPreset.Controls.Add($cmbPresets)
 
 $lblPresetDesc = New-Object System.Windows.Forms.Label
 $lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(200, 32)
-$lblPresetDesc.Text = "Voz Broadcast + Legenda Elegante na Borda."
+$lblPresetDesc.Text = "Voz Broadcast + Legenda Fluida para Aulas."
 $lblPresetDesc.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
 $lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $grpPreset.Controls.Add($lblPresetDesc)
@@ -143,7 +143,7 @@ $tabVideo.Controls.Add($chkAudioBroadcast)
 
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox
 $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 115); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
-$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda na Borda Inferior"
+$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"
 $chkHardsubHoriz.Checked = $cfg.Hardsub
 $tabVideo.Controls.Add($chkHardsubHoriz)
 
@@ -302,39 +302,66 @@ foreach ($video in $videos) {
     & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af $cadeiaFiltrosVoz $audioTratTemp
 
     $srtFinal = Join-Path $pastas["1"] "$nome.srt"
-    Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
+    $assFinal = Join-Path $pastas["1"] "$nome.ass"
+    
+    Write-Host "    Transcrevendo com Whisper (Word Timestamps) para Legenda Fluida..." -ForegroundColor Yellow
     $scriptTranscricao = @"
 import os
 try:
     from faster_whisper import WhisperModel
     model = WhisperModel('medium', device='cpu', compute_type='int8')
-    segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt')
-    with open(r'$srtFinal', 'w', encoding='utf-8') as f:
+    segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt', word_timestamps=True)
+    
+    with open(r'$srtFinal', 'w', encoding='utf-8') as f_srt, open(r'$assFinal', 'w', encoding='utf-8') as f_ass:
+        # Cabecalho do formato ASS para gerenciar fade suave e elegancia na borda
+        f_ass.write('[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n')
+        f_ass.write('[V4+ Styles]\n')
+        f_ass.write('Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n')
+        # Estilo Aula Fluida: Arial limpa, tamanho 54 (proporcional a 1080p), cor branca com sombra suave e fundo semitransparente discreto
+        f_ass.write('Style: AulaFluida,Arial,54,&H00FFFFFF,&H0000FFFF,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,1.5,1,2,40,40,35,1\n\n')
+        f_ass.write('[Events]\n')
+        f_ass.write('Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n')
+        
         idx = 1
-        for s in segments:
-            h1, m1, s1 = int(s.start // 3600), int((s.start % 3600) // 60), s.start % 60
-            h2, m2, s2 = int(s.end // 3600), int((s.end % 3600) // 60), s.end % 60
-            f.write(f'{idx}\n{h1:02d}:{m1:02d}:{s1:06.3f}'.replace('.', ',') + ' --> ' + f'{h2:02d}:{m2:02d}:{s2:06.3f}'.replace('.', ',') + f'\n{s.text.strip()}\n\n')
+        for seg in segments:
+            h1, m1, s1 = int(seg.start // 3600), int((seg.start % 3600) // 60), seg.start % 60
+            h2, m2, s2 = int(seg.end // 3600), int((seg.end % 3600) // 60), seg.end % 60
+            
+            tc_srt1 = f'{h1:02d}:{m1:02d}:{s1:06.3f}'.replace('.', ',')
+            tc_srt2 = f'{h2:02d}:{m2:02d}:{s2:06.3f}'.replace('.', ',')
+            f_srt.write(f'{idx}\n{tc_srt1} --> {tc_srt2}\n{seg.text.strip()}\n\n')
+            
+            # Formato de tempo para ASS (H:MM:SS.cc)
+            def fmt_ass(t):
+                th = int(t // 3600)
+                tm = int((t % 3600) // 60)
+                ts = t % 60
+                return f'{th}:{tm:02d}:{ts:05.2f}'
+            
+            t_start = fmt_ass(seg.start)
+            t_end = fmt_ass(seg.end)
+            texto_limpo = seg.text.strip().replace('\n', ' ')
+            
+            # Adiciona efeito imersivo de fade-in suave de 150ms na legenda da aula
+            f_ass.write(f'Dialogue: 0,{t_start},{t_end},AulaFluida,,0,0,0,,{{\\fad(150,150)}}{texto_limpo}\n')
             idx += 1
-    print('    [OK] Legenda gerada.')
+            
+    print('    [OK] Legendas SRT e ASS fluidas geradas com sucesso.')
 except Exception as e:
     print(f'    [ERRO WHISPER] {e}')
 "@
     python -c $scriptTranscricao
     Start-Sleep -Seconds 1
 
-    # HARD SUB COM LEGENDA ANCORADA NA BORDA INFERIOR (MarginV = 22px)
-    if ($fazerHardsub -and (Test-Path $srtFinal) -and ((Get-Item $srtFinal).Length -gt 10)) {
+    # HARD SUB USANDO O ARQUIVO ASS FLUIDO (Com animação de fade suave e margem elegante)
+    if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao com Legenda Elegante na Borda..." -ForegroundColor Magenta
-            $srtFormatado = $srtFinal.Replace("\", "/").Replace(":", "\:")
-            
-            # Margem inferior reduzida para 22px (encostada na borda com elegância)
-            $estiloBordaInferior = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=22"
+            Write-Host "    Renderizando versao com Legenda Fluida para Aulas..." -ForegroundColor Magenta
+            $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
             
             & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
-                -vf "subtitles='$srtFormatado':force_style='$estiloBordaInferior'" `
+                -vf "subtitles='$assFormatado'" `
                 -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
         }
     }
