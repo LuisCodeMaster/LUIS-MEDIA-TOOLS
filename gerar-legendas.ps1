@@ -7,12 +7,12 @@ $MaxCharsNormal = 42
 $MaxCharsShorts = 32
 
 $MinDuration = 0.80
-$IdealMinDuration = 1.40
+$IdealMinDuration = 1.30
 $IdealMaxDuration = 4.00
-$HardMaxDuration = 5.00
+$HardMaxDuration = 5.20
 
-$NaturalPause = 0.45
-$StrongPause = 0.75
+$NaturalPause = 0.40
+$StrongPause = 0.70
 
 function Normalize-WordText {
     param([string]$Text)
@@ -49,7 +49,7 @@ function Test-WeakPunctuation {
 function Test-WeakEnding {
     param([string]$Text)
     $clean = Get-WordClean $Text
-    $weakWords = @("de", "da", "do", "das", "dos", "e", "que", "para", "pra", "com", "em", "um", "uma", "a", "o", "as", "os", "sua", "seu", "suas", "seus", "voce", "onde", "depois", "seja", "vai")
+    $weakWords = @("de", "da", "do", "das", "dos", "e", "que", "para", "pra", "com", "em", "um", "uma", "a", "o", "as", "os", "sua", "seu", "suas", "seus", "voce", "onde", "depois", "seja", "vai", "i", "my")
     return ($weakWords -contains $clean)
 }
 
@@ -159,48 +159,42 @@ function Build-BaseCaptions {
             $shouldBreak = $true
         }
 
-        # Pausa forte de fala
+        # Pausa acústica clara
         if ($strongPause -and $current.Count -ge 2) {
             $shouldBreak = $true
         }
 
-        # Ponto de quebra semântica após "idade," (evita estourar o bloco de apresentação)
-        if ($weakPunctuation -and $prevClean -eq "idade") {
+        # Quebra equilibrada em vírgula assim que atinge 2.5s (evita arrastar até estourar 5s)
+        if ($weakPunctuation -and $candidateDuration -ge 2.5 -and $current.Count -ge 3) {
             $shouldBreak = $true
         }
 
-        # Ponto de quebra antes de "e depois"
-        if ($cleanWord -eq "e" -and $nextWordClean -eq "depois" -and $current.Count -ge 3) {
+        # Quebra natural antes de oração conectiva / temporal
+        if (($cleanWord -eq "depois" -or ($cleanWord -eq "e" -and $nextWordClean -eq "depois")) -and $candidateDuration -ge 1.8 -and $current.Count -ge 3) {
             $shouldBreak = $true
         }
 
-        # Pausa com pontuação fraca em blocos já desenvolvidos
-        if ($naturalPause -and $current.Count -ge 3 -and $candidateDuration -ge $IdealMinDuration) {
-            if ($weakPunctuation) {
-                $shouldBreak = $true
-            }
-        }
-
-        # Limite máximo de duração
+        # Limites máximos de segurança
         if ($candidateDuration -gt $HardMaxDuration) {
             $shouldBreak = $true
         }
-
-        # Limite máximo de caracteres por bloco
-        if ($candidateText.Length -gt 74 -and $current.Count -ge 4) {
+        if ($candidateText.Length -gt 72 -and $current.Count -ge 4) {
             $shouldBreak = $true
         }
 
-        # TRAVA: Proíbe cortar entre pronome e verbo de ligação ("voce e")
-        if ($shouldBreak -and $cleanWord -eq "e" -and $prevClean -eq "voce") {
-            $shouldBreak = $false
-        }
-
-        # TRAVA: Proíbe terminar bloco em palavra fraca conectiva
-        if ($shouldBreak -and (Test-WeakEnding $previous.Text)) {
-            if ($candidateDuration -lt 6.0) {
-                $shouldBreak = $false
-            }
+        # TRAVAS SEMÂNTICAS: Impede quebras no meio de expressões conhecidas
+        if ($shouldBreak) {
+            # "voce e"
+            if ($cleanWord -eq "e" -and $prevClean -eq "voce") { $shouldBreak = $false }
+            # "I am from"
+            if ($prevClean -eq "am" -and $cleanWord -eq "from") { $shouldBreak = $false }
+            if ($prevClean -eq "i" -and $cleanWord -eq "am") { $shouldBreak = $false }
+            # "years old" / "is old"
+            if ($cleanWord -eq "old") { $shouldBreak = $false }
+            # "my name is"
+            if ($prevClean -eq "name" -and $cleanWord -eq "is") { $shouldBreak = $false }
+            # Palavras fracas no fim da linha
+            if (Test-WeakEnding $previous.Text -and $candidateDuration -lt 5.8) { $shouldBreak = $false }
         }
 
         if ($shouldBreak) {
@@ -248,6 +242,7 @@ function Optimize-Captions {
 
         $mergedText = Join-Words $mergedWords
         $mergedDuration = [double]$next.End - [double]$current.Start
+        $nextDuration = [double]$next.End - [double]$next.Start
         $canMerge = $true
 
         if ($mergedDuration -gt $HardMaxDuration) { $canMerge = $false }
@@ -263,25 +258,17 @@ function Optimize-Captions {
             $canMerge = $false
         }
 
-        # Não funde se o próximo bloco começar com "e depois"
-        if ($next.Words.Count -ge 2) {
+        if ($next.Words.Count -ge 1) {
             $w0 = Get-WordClean $next.Words[0].Text
-            $w1 = Get-WordClean $next.Words[1].Text
-            if ($w0 -eq "e" -and $w1 -eq "depois") {
+            if ($w0 -eq "depois") { $canMerge = $false }
+            if ($next.Words.Count -ge 2 -and $w0 -eq "e" -and (Get-WordClean $next.Words[1].Text) -eq "depois") {
                 $canMerge = $false
             }
         }
 
-        # Não funde se o bloco atual terminou em "idade," (mantém divisão limpa da lista)
-        if ((Get-WordClean $lastWordCurrent.Text) -eq "idade") {
-            $canMerge = $false
-        }
-
-        # Anexa finalizações curtas de frase
-        if (-not $canMerge -and $next.Words.Count -le 3 -and $mergedDuration -le 6.0 -and $mergedText.Length -le 78) {
-            if (-not (Test-StrongPunctuation $lastWordCurrent.Text)) {
-                $canMerge = $true
-            }
+        # FUSÃO FORÇADA DE FRAGMENTOS RESIDUAIS (elimina blocos de até 3 palavras ou < 1.1s)
+        if (-not $canMerge -and ($next.Words.Count -le 3 -or $nextDuration -lt 1.1) -and $mergedDuration -le 6.2 -and $mergedText.Length -le 78) {
+            $canMerge = $true
         }
 
         if ($canMerge) {
@@ -337,6 +324,7 @@ function Split-For-Display {
         $currentClean = Get-WordClean $words[$i].Text
         $nextClean = Get-WordClean $words[$i + 1].Text
         if ($nextClean -eq "e" -and $currentClean -eq "voce") { continue }
+        if ($currentClean -eq "am" -and $nextClean -eq "from") { continue }
 
         $dist = [math]::Abs($i - $midIndex)
         $score = $dist
@@ -392,7 +380,6 @@ function Format-CaptionText {
         return $fullText
     }
 
-    $midLen = $fullText.Length / 2
     $bestIndex = -1
     $bestScore = 99999
 
@@ -410,12 +397,11 @@ function Format-CaptionText {
         if ($rightText.Length -gt $MaxChars) { $overflowPenalty += ($rightText.Length - $MaxChars) * 20 }
 
         $imbalance = [math]::Abs($leftText.Length - $rightText.Length)
-
         $score = $imbalance + $overflowPenalty
 
         $wordText = $Words[$i].Text
-        if (Test-WeakPunctuation $wordText -and $leftText.Length -ge 10) {
-            $score -= 15
+        if (Test-WeakPunctuation $wordText -and $leftText.Length -ge 8) {
+            $score -= 20
         }
         if (Test-WeakEnding $wordText) {
             $score += 35
@@ -486,7 +472,7 @@ function Write-Srt {
 }
 
 Write-Host "==============================================="
-Write-Host "       LUIS MEDIA TOOLS - LEGENDAS v4"
+Write-Host "       LUIS MEDIA TOOLS - LEGENDAS v4.2"
 Write-Host "==============================================="
 Write-Host ""
 
@@ -537,7 +523,3 @@ Write-Host "[6/6] Concluido!"
 Write-Host ""
 Write-Host "Legenda normal : $countNormal blocos"
 Write-Host "Legenda Shorts : $countShorts blocos"
-Write-Host ""
-Write-Host "Arquivos:"
-Write-Host "  $normalPath"
-Write-Host "  $shortsPath"
