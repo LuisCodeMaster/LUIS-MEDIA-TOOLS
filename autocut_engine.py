@@ -72,15 +72,14 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
     if not tramos_fala:
         return
     
+    # Prepara os filtros de corte mantendo taxa de amostragem fixa a 48kHz em estéreo
     filtros = []
     concat_args = []
     for i, (inicio, fim) in enumerate(tramos_fala):
         filtros.append(f"[0:v]trim=start={inicio:.3f}:end={fim:.3f},setpts=PTS-STARTPTS[v{i}];")
-        # Garante o corte limpo de áudio com micro-fade anti-estalo
-        filtros.append(f"[0:a]atrim=start={inicio:.3f}:end={fim:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.015,afade=t=out:d=0.015[a{i}];")
+        filtros.append(f"[0:a]atrim=start={inicio:.3f}:end={fim:.3f},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.015,afade=t=out:d=0.015[a{i}];")
         concat_args.append(f"[v{i}][a{i}]")
 
-    # Monta a string unificada do filtro complexo
     filtro_complexo = "".join(filtros) + "".join(concat_args) + f"concat=n={len(tramos_fala)}:v=1:a=1[outv][outa]"
     
     cmd = [
@@ -89,7 +88,7 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
         "-filter_complex", filtro_complexo,
         "-map", "[outv]", "-map", "[outa]",
         "-c:v", "libx264", "-preset", "faster", "-crf", "20",
-        "-c:a", "aac", "-b:a", "192k",
+        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000",
         video_saida
     ]
     resultado = subprocess.run(cmd, stderr=subprocess.PIPE, text=True)
@@ -117,11 +116,11 @@ def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None):
     arquivo_edl = os.path.join(pasta_saida_edl, f"{nome_base}_timeline_cortes.edl")
     exportar_edl(fala, arquivo_edl, nome_clip=os.path.basename(caminho_video))
 
-    # 2. Renderização do vídeo dinâmico COM ÁUDIO MAPEADO
+    # 2. Renderização do vídeo dinâmico com áudio forçado em 48kHz Estéreo
     video_cortado = os.path.join(pasta_saida_video, f"{nome_base}_DINAMICO.mp4")
-    print(f"    [RENDER] Renderizando video fatiado com audio sincronizado...")
+    print(f"    [RENDER] Renderizando video fatiado com sincronizacao estavel de audio...")
     renderizar_video_cortado(caminho_video, fala, video_cortado)
-    print(f"    [OK] Video dinamico com som gerado: {os.path.basename(video_cortado)}")
+    print(f"    [OK] Video dinamico gerado: {os.path.basename(video_cortado)}")
     return video_cortado
 
 if __name__ == "__main__":
