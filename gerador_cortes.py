@@ -101,8 +101,8 @@ def renderizar_corte_vertical(video_orig, start_tc, end_tc, srt_corte, video_sai
         return
 
     srt_escapado = srt_corte.replace("\\", "/").replace(":", "\:")
-    # Estilo suave para Shorts/Reels (Arial limpa, sem exagero)
-    estilo = "FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=150"
+    # Margem inferior adaptada para 9:16 (MarginV = 80px)
+    estilo = "FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=80"
 
     filtro_complexo = (
         f"[0:v]split=2[bg_in][fg_in];"

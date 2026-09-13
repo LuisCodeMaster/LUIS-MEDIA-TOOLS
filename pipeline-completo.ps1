@@ -107,7 +107,7 @@ $grpPreset.Controls.Add($cmbPresets)
 
 $lblPresetDesc = New-Object System.Windows.Forms.Label
 $lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(200, 32)
-$lblPresetDesc.Text = "Voz Broadcast + Legenda Suave Estilo Curso."
+$lblPresetDesc.Text = "Voz Broadcast + Legenda Elegante na Borda."
 $lblPresetDesc.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
 $lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $grpPreset.Controls.Add($lblPresetDesc)
@@ -143,7 +143,7 @@ $tabVideo.Controls.Add($chkAudioBroadcast)
 
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox
 $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 115); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
-$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Suave"
+$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda na Borda Inferior"
 $chkHardsubHoriz.Checked = $cfg.Hardsub
 $tabVideo.Controls.Add($chkHardsubHoriz)
 
@@ -323,22 +323,18 @@ except Exception as e:
     python -c $scriptTranscricao
     Start-Sleep -Seconds 1
 
-    # HARD SUB COM ESTILO SUAVE (Ajustado para curso profissional)
+    # HARD SUB COM LEGENDA ANCORADA NA BORDA INFERIOR (MarginV = 22px)
     if ($fazerHardsub -and (Test-Path $srtFinal) -and ((Get-Item $srtFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao com Legenda Suave..." -ForegroundColor Magenta
+            Write-Host "    Renderizando versao com Legenda Elegante na Borda..." -ForegroundColor Magenta
             $srtFormatado = $srtFinal.Replace("\", "/").Replace(":", "\:")
             
-            # Estilo Suave:
-            # - Fonte Arial limpa e profissional
-            # - Tamanho 18 (proporcional, sem exagero)
-            # - Sombra suave (Shadow=1) com contorno leve (Outline=1)
-            # - Margem inferior de 40px para não ficar grudada na borda
-            $estiloSuave = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=40"
+            # Margem inferior reduzida para 22px (encostada na borda com elegância)
+            $estiloBordaInferior = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=22"
             
             & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
-                -vf "subtitles='$srtFormatado':force_style='$estiloSuave'" `
+                -vf "subtitles='$srtFormatado':force_style='$estiloBordaInferior'" `
                 -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
         }
     }
