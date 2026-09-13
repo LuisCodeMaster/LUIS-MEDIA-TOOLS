@@ -64,7 +64,7 @@ function Gerar-PacoteAula {
     param([string]$DiretorioAula)
     
     $NomeAula = [System.IO.Path]::GetFileName($DiretorioAula)
-    Write-Host "Processando entregáveis de: $NomeAula" -ForegroundColor Cyan
+    Write-Host "Processando entregÃ¡veis de: $NomeAula" -ForegroundColor Cyan
     
     $dirLegendas = Join-Path $DiretorioAula "1_Legendas"
     $dirAudioTratado = Join-Path $DiretorioAula "3_Audio_Tratado"
@@ -87,8 +87,8 @@ function Gerar-PacoteAula {
     $duracaoTotalSegundos = 0.0
     $totalPalavras = 0
     $listaCapitulos = @()
-    $tabelaBlocosMd = @("| Bloco | Duração | Palavras | Ritmo (WPM) |", "|---|---|---|---|")
-    $textoCompletoApostila = @("# Apostila Didática - $NomeAula`n`n")
+    $tabelaBlocosMd = @("| Bloco | DuraÃ§Ã£o | Palavras | Ritmo (WPM) |", "|---|---|---|---|")
+    $textoCompletoApostila = @("# Apostila DidÃ¡tica - $NomeAula`n`n")
     
     foreach ($j in $jsons) {
         $dados = Get-Content -Raw -Path $j.FullName -Encoding UTF8 | ConvertFrom-Json
@@ -136,18 +136,18 @@ function Gerar-PacoteAula {
     $caminhoApostila = Join-Path $dirDocs "apostila-leitura.md"
     [System.IO.File]::WriteAllLines($caminhoApostila, [string[]]$textoCompletoApostila, [System.Text.UTF8Encoding]::new($false))
     
-    # 3. Gerar Relatório Executivo
+    # 3. Gerar RelatÃ³rio Executivo
     $durTotalObj = [timespan]::FromSeconds($duracaoTotalSegundos)
     $duracaoTotalFormatada = "{0:D2}h {1:D2}m {2:D2}s" -f $durTotalObj.Hours, $durTotalObj.Minutes, $durTotalObj.Seconds
     $wpmMedio = if ($durTotalObj.TotalMinutes -gt 0) { [int]($totalPalavras / $durTotalObj.TotalMinutes) } else { 0 }
     
     $relatorioMd = @"
-# Relatório de Produção — $NomeAula
+# RelatÃ³rio de ProduÃ§Ã£o â€” $NomeAula
 
-- **Duração Total Consolidada:** $duracaoTotalFormatada
+- **DuraÃ§Ã£o Total Consolidada:** $duracaoTotalFormatada
 - **Total de Palavras Transcritas:** $totalPalavras palavras
-- **Ritmo Médio de Locução:** $wpmMedio WPM (Palavras Por Minuto)
-- **Total de Blocos Processados:** $($jsons.Count) vídeos
+- **Ritmo MÃ©dio de LocuÃ§Ã£o:** $wpmMedio WPM (Palavras Por Minuto)
+- **Total de Blocos Processados:** $($jsons.Count) vÃ­deos
 
 ## Detalhamento por Bloco
 
@@ -159,7 +159,7 @@ $($tabelaBlocosMd -join "`r`n")
     $caminhoRelatorio = Join-Path $dirDocs "relatorio.md"
     [System.IO.File]::WriteAllText($caminhoRelatorio, $relatorioMd, [System.Text.UTF8Encoding]::new($false))
     
-    # 4. Empacotar Entregável em .ZIP
+    # 4. Empacotar EntregÃ¡vel em .ZIP
     $arquivoZip = Join-Path $DiretorioAula "$NomeAula-Entregavel.zip"
     if (Test-Path $arquivoZip) { Remove-Item -Path $arquivoZip -Force }
     
@@ -181,12 +181,12 @@ $($tabelaBlocosMd -join "`r`n")
         Remove-Item -Path $tempZipFolder -Recurse -Force
     }
     
-    Write-Host "[OK] Entregáveis, legendas .ASS, relatório e ZIP criados em: $NomeAula" -ForegroundColor Green
+    Write-Host "[OK] EntregÃ¡veis, legendas .ASS, relatÃ³rio e ZIP criados em: $NomeAula" -ForegroundColor Green
 }
 
 Clear-Host
 Write-Host "=========================================================" -ForegroundColor Cyan
-Write-Host "        GERADOR DE ENTREGÁVEIS E PACOTE CLIENTE          " -ForegroundColor Cyan
+Write-Host "        GERADOR DE ENTREGÃVEIS E PACOTE CLIENTE          " -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -210,7 +210,7 @@ if ($pastasAulas.Count -eq 0) {
 
 Write-Host ""
 Write-Host "=========================================================" -ForegroundColor Green
-Write-Host "          TODOS OS ENTREGÁVEIS FORAM CONCLUÍDOS!         " -ForegroundColor Green
+Write-Host "          TODOS OS ENTREGÃVEIS FORAM CONCLUÃDOS!         " -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
 [System.Console]::Beep(1000, 200)
 [System.Console]::Beep(1400, 300)

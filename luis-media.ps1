@@ -1,22 +1,24 @@
 function Mostrar-Menu {
     Clear-Host
-    Write-Host "===============================================" -ForegroundColor Cyan
-    Write-Host "               LUIS MEDIA TOOLS                " -ForegroundColor Cyan
-    Write-Host "===============================================" -ForegroundColor Cyan
-    Write-Host "  [A] PIPELINE COMPLETO (1 CLIQUE - TUDO-EM-UM)" -ForegroundColor Green
-    Write-Host "-----------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundColor White
-    Write-Host "  2. Gerar/Regenerar Legendas a partir de JSON" -ForegroundColor White
-    Write-Host "  3. Transcrever Arquivo Unico" -ForegroundColor White
-    Write-Host "  4. Cortar Silencios de Audios/Aulas (Remover Pausas)" -ForegroundColor White
-    Write-Host "  5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor White
-    Write-Host "  6. Normalizar Volume para YouTube/Cursos (-14 LUFS)" -ForegroundColor White
-    Write-Host "  7. Organizar Saida em Subpastas Categorizadas" -ForegroundColor White
-    Write-Host "  8. Gerar Entregaveis Finais (Relatorio, ASS, Apostila, ZIP)" -ForegroundColor White
-    Write-Host "  9. Queimar Legenda no Video MP4 (Hardsub)" -ForegroundColor White
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "                      LUIS MEDIA TOOLS                      " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  [S] CRIAR / COMPILAR SLIDES DA AULA (Markdown -> HTML)" -ForegroundColor Yellow
+    Write-Host "  [A] PILOTO AUTOMATICO COMPLETO (1 Clique: Tudo-em-um)" -ForegroundColor Green
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  MODULOS INDIVIDUAIS (POS-PRODUCAO):" -ForegroundColor DarkGray
+    Write-Host "   1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundColor White
+    Write-Host "   2. Regenerar Legendas a partir de JSON" -ForegroundColor White
+    Write-Host "   3. Transcrever Arquivo Unico" -ForegroundColor White
+    Write-Host "   4. Cortar Silencios de Audios/Aulas (Remover Pausas)" -ForegroundColor White
+    Write-Host "   5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor White
+    Write-Host "   6. Normalizar Volume para YouTube/Cursos (-14 LUFS)" -ForegroundColor White
+    Write-Host "   7. Organizar Saida em Subpastas Categorizadas" -ForegroundColor White
+    Write-Host "   8. Gerar Entregaveis Finais (Relatorio, ASS, Apostila, ZIP)" -ForegroundColor White
+    Write-Host "   9. Queimar Legenda no Video MP4 (Hardsub)" -ForegroundColor White
     Write-Host "  10. Ajuda: O que cada opcao faz?" -ForegroundColor Cyan
-    Write-Host "  0. Sair" -ForegroundColor DarkGray
-    Write-Host "===============================================" -ForegroundColor Cyan
+    Write-Host "   0. Sair" -ForegroundColor DarkGray
+    Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -26,7 +28,8 @@ function Mostrar-Ajuda {
     Write-Host "             GUIA DE FERRAMENTAS - LUIS MEDIA TOOLS         " -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "[A] Pipeline Completo: Roda da transcricao ao ZIP final automaticamente." -ForegroundColor Green
+    Write-Host "[S] Slides: Converte roteiro markdown em apresentacao HTML interativa." -ForegroundColor Yellow
+    Write-Host "[A] Piloto Automatico: Roda da transcricao ao ZIP final automaticamente." -ForegroundColor Green
     Write-Host "[1] Processar Aulas: Transcreve e legenda arquivos da pasta entrada." -ForegroundColor Yellow
     Write-Host "[2] Regenerar Legendas: Recalcula quebras de texto pelo .json." -ForegroundColor Yellow
     Write-Host "[3] Transcrever Unico: Transcreve apenas 1 arquivo pontual." -ForegroundColor Yellow
@@ -43,9 +46,10 @@ function Mostrar-Ajuda {
 
 do {
     Mostrar-Menu
-    $opcao = Read-Host "Escolha uma opcao [A, 0-10]"
+    $opcao = Read-Host "Escolha uma opcao [S, A, 0-10]"
 
     switch -Regex ($opcao) {
+        "^[sS]$" { .\gerar-slides.ps1; Pause }
         "^[aA]$" { .\pipeline-completo.ps1; Pause }
         "^1$"    { .\processar-aula.ps1; Pause }
         "^2$"    {
