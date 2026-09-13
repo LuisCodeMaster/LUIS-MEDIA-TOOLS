@@ -10,8 +10,9 @@ function Mostrar-Menu {
     Write-Host "  5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor White
     Write-Host "  6. Normalizar Volume para YouTube/Cursos (-14 LUFS)" -ForegroundColor White
     Write-Host "  7. Organizar Saida em Subpastas Categorizadas" -ForegroundColor White
-    Write-Host "  8. Gerar Entregaveis Finais (Relatorio, ASS, Apostila, ZIP)" -ForegroundColor Yellow
-    Write-Host "  9. Ajuda: O que cada opcao faz?" -ForegroundColor Cyan
+    Write-Host "  8. Gerar Entregaveis Finais (Relatorio, ASS, Apostila, ZIP)" -ForegroundColor White
+    Write-Host "  9. Queimar Legenda no Video MP4 (Hardsub / Pronto p/ Postar)" -ForegroundColor Yellow
+    Write-Host "  10. Ajuda: O que cada opcao faz?" -ForegroundColor Cyan
     Write-Host "  0. Sair" -ForegroundColor DarkGray
     Write-Host "===============================================" -ForegroundColor Cyan
     Write-Host ""
@@ -27,10 +28,11 @@ function Mostrar-Ajuda {
     Write-Host "[2] Regenerar Legendas: Recalcula quebras de texto pelo .json." -ForegroundColor Yellow
     Write-Host "[3] Transcrever Unico: Transcreve apenas 1 arquivo pontual." -ForegroundColor Yellow
     Write-Host "[4] Cortar Silencios: Enxuga trechos mudos com FFmpeg (-40dB)." -ForegroundColor Yellow
-    Write-Host "[5] Unificar Audios: Une todos os audios em uma faixa mestre contínua." -ForegroundColor Yellow
+    Write-Host "[5] Unificar Audios: Une todos os audios em uma faixa mestre continua." -ForegroundColor Yellow
     Write-Host "[6] Normalizar Volume: Calibra o ganho em -14 LUFS (EBU R128)." -ForegroundColor Yellow
     Write-Host "[7] Organizar Saida: Separa em 1_Legendas, 2_Audio_Bruto, etc." -ForegroundColor Yellow
     Write-Host "[8] Gerar Entregaveis: Cria .ASS estilizado, capitulos, apostila e ZIP." -ForegroundColor Yellow
+    Write-Host "[9] Queimar Legenda: Exporta o MP4 finalizado com a legenda embutida." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Pressione qualquer tecla para voltar ao menu..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -38,7 +40,7 @@ function Mostrar-Ajuda {
 
 do {
     Mostrar-Menu
-    $opcao = Read-Host "Escolha uma opcao [0-9]"
+    $opcao = Read-Host "Escolha uma opcao [0-10]"
 
     switch ($opcao) {
         "1" { .\processar-aula.ps1; Pause }
@@ -57,7 +59,8 @@ do {
         "6" { .\normalizar-audio.ps1; Pause }
         "7" { .\organizar-saida.ps1; Pause }
         "8" { .\gerar-entregaveis.ps1; Pause }
-        "9" { Mostrar-Ajuda }
+        "9" { .\queimar-legenda.ps1; Pause }
+        "10" { Mostrar-Ajuda }
         "0" { Write-Host "Saindo..." -ForegroundColor DarkGray; break }
         Default { Write-Host "Opcao invalida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }
