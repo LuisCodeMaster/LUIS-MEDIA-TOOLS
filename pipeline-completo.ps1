@@ -9,7 +9,7 @@ Add-Type -AssemblyName System.Drawing
 
 $raiz = "C:\Users\ferna\Desktop\LUIS-MEDIA-TOOLS"
 
-# 1. Identificar origem e nome do projeto
+# 1. Identificar origem e projeto
 if ($CaminhoPasta -ne "") {
     $itemAlvo = Get-Item -LiteralPath $CaminhoPasta
     if ($itemAlvo.PSIsContainer) {
@@ -30,55 +30,52 @@ if (-not (Test-Path $dirEntrada)) {
     exit 1
 }
 
-# Caminho de destino sugerido por padrao
 $destinoSugerido = if ($PastaDestino -ne "") { $PastaDestino } else { Join-Path $raiz "saida\$nomeAula" }
 
 # =========================================================
-# 2. DASHBOARD GRÁFICO UNIFICADO (WINDOWS FORMS PRO)
+# 2. DASHBOARD GRÁFICO UNIFICADO COM SUPORTE A REDES
 # =========================================================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "LUIS-MEDIA-TOOLS - Painel de Controle Pro"
-$form.Size = New-Object System.Drawing.Size(520, 480)
+$form.Size = New-Object System.Drawing.Size(530, 520)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
 $form.BackColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
 
-# Título do Topo
 $lblHeader = New-Object System.Windows.Forms.Label
 $lblHeader.Location = New-Object System.Drawing.Point(20, 15)
-$lblHeader.Size = New-Object System.Drawing.Size(460, 30)
+$lblHeader.Size = New-Object System.Drawing.Size(470, 26)
 $lblHeader.Text = "CONFIGURAR ESTEIRA DE PRODUÇÃO"
 $lblHeader.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $lblHeader.ForeColor = [System.Drawing.Color]::FromArgb(30, 41, 59)
 $form.Controls.Add($lblHeader)
 
-# Info da Aula/Origem
 $lblOrigem = New-Object System.Windows.Forms.Label
-$lblOrigem.Location = New-Object System.Drawing.Point(22, 48)
-$lblOrigem.Size = New-Object System.Drawing.Size(460, 20)
+$lblOrigem.Location = New-Object System.Drawing.Point(22, 45)
+$lblOrigem.Size = New-Object System.Drawing.Size(470, 20)
 $lblOrigem.Text = "Projeto: $nomeAula"
 $lblOrigem.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $lblOrigem.ForeColor = [System.Drawing.Color]::FromArgb(71, 85, 105)
 $form.Controls.Add($lblOrigem)
 
-# Grupo: Pasta de Destino
+# Grupo Destino
 $grpDestino = New-Object System.Windows.Forms.GroupBox
-$grpDestino.Location = New-Object System.Drawing.Point(20, 75)
-$grpDestino.Size = New-Object System.Drawing.Size(460, 70)
+$grpDestino.Location = New-Object System.Drawing.Point(20, 70)
+$grpDestino.Size = New-Object System.Drawing.Size(470, 68)
 $grpDestino.Text = " Diretório de Destino "
 $grpDestino.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($grpDestino)
 
 $txtDestino = New-Object System.Windows.Forms.TextBox
 $txtDestino.Location = New-Object System.Drawing.Point(15, 25)
-$txtDestino.Size = New-Object System.Drawing.Size(335, 23)
+$txtDestino.Size = New-Object System.Drawing.Size(345, 23)
 $txtDestino.Text = $destinoSugerido
 $grpDestino.Controls.Add($txtDestino)
 
 $btnBrowse = New-Object System.Windows.Forms.Button
-$btnBrowse.Location = New-Object System.Drawing.Point(360, 24)
+$btnBrowse.Location = New-Object System.Drawing.Point(370, 24)
 $btnBrowse.Size = New-Object System.Drawing.Size(85, 25)
 $btnBrowse.Text = "Procurar..."
 $btnBrowse.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
@@ -92,63 +89,58 @@ $btnBrowse.Add_Click({
 })
 $grpDestino.Controls.Add($btnBrowse)
 
-# Grupo: Módulos de Processamento
+# Grupo Módulos
 $grpModulos = New-Object System.Windows.Forms.GroupBox
-$grpModulos.Location = New-Object System.Drawing.Point(20, 155)
-$grpModulos.Size = New-Object System.Drawing.Size(460, 200)
+$grpModulos.Location = New-Object System.Drawing.Point(20, 145)
+$grpModulos.Size = New-Object System.Drawing.Size(470, 240)
 $grpModulos.Text = " Selecione os Módulos Ativos "
 $grpModulos.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($grpModulos)
 
-# Checkbox 1: Auto-Cut
 $chkAutoCut = New-Object System.Windows.Forms.CheckBox
-$chkAutoCut.Location = New-Object System.Drawing.Point(20, 25)
-$chkAutoCut.Size = New-Object System.Drawing.Size(420, 32)
-$chkAutoCut.Text = "Auto-Cut Dinâmico (Remove silêncios + Timeline EDL DaVinci)"
+$chkAutoCut.Location = New-Object System.Drawing.Point(20, 22)
+$chkAutoCut.Size = New-Object System.Drawing.Size(430, 28)
+$chkAutoCut.Text = "Auto-Cut Dinâmico (Remove pausas + Timeline EDL DaVinci)"
 $chkAutoCut.Checked = $true
-$chkAutoCut.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$chkAutoCut.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $grpModulos.Controls.Add($chkAutoCut)
 
-# Checkbox 2: Hardsub
 $chkHardsub = New-Object System.Windows.Forms.CheckBox
-$chkHardsub.Location = New-Object System.Drawing.Point(20, 65)
-$chkHardsub.Size = New-Object System.Drawing.Size(420, 32)
-$chkHardsub.Text = "Hardsub (Renderizar versão com legenda embutida no vídeo)"
+$chkHardsub.Location = New-Object System.Drawing.Point(20, 58)
+$chkHardsub.Size = New-Object System.Drawing.Size(430, 28)
+$chkHardsub.Text = "Hardsub Horizontal (Vídeo dinâmico com legenda embutida)"
 $chkHardsub.Checked = $true
-$chkHardsub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$chkHardsub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $grpModulos.Controls.Add($chkHardsub)
 
-# Checkbox 3: Slides e Apostila PDF
 $chkSlides = New-Object System.Windows.Forms.CheckBox
-$chkSlides.Location = New-Object System.Drawing.Point(20, 105)
-$chkSlides.Size = New-Object System.Drawing.Size(420, 32)
-$chkSlides.Text = "Slides Inteligentes e Apostila Oficial em PDF (Edge Headless)"
+$chkSlides.Location = New-Object System.Drawing.Point(20, 94)
+$chkSlides.Size = New-Object System.Drawing.Size(430, 28)
+$chkSlides.Text = "Slides Inteligentes e Apostila em PDF (Edge Headless)"
 $chkSlides.Checked = $true
-$chkSlides.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$chkSlides.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $grpModulos.Controls.Add($chkSlides)
 
-# Checkbox 4: IA Local Llama
 $chkIA = New-Object System.Windows.Forms.CheckBox
-$chkIA.Location = New-Object System.Drawing.Point(20, 145)
-$chkIA.Size = New-Object System.Drawing.Size(420, 32)
+$chkIA.Location = New-Object System.Drawing.Point(20, 130)
+$chkIA.Size = New-Object System.Drawing.Size(430, 28)
 $chkIA.Text = "IA Local Llama (Resumo Executivo .md + Quiz Interativo .html)"
 $chkIA.Checked = $true
-$chkIA.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$chkIA.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $grpModulos.Controls.Add($chkIA)
 
-# Vinculo: Se desligar o AutoCut, avisa/desmarca o Hardsub dependente
-$chkAutoCut.Add_CheckedChanged({
-    if (-not $chkAutoCut.Checked) {
-        $chkHardsub.Checked = $false
-        $chkHardsub.Enabled = $false
-    } else {
-        $chkHardsub.Enabled = $true
-    }
-})
+$chkCortes = New-Object System.Windows.Forms.CheckBox
+$chkCortes.Location = New-Object System.Drawing.Point(20, 166)
+$chkCortes.Size = New-Object System.Drawing.Size(430, 36)
+$chkCortes.Text = "Cortes Verticais 9:16 (3 Melhores Momentos via Llama + Blur)"
+$chkCortes.Checked = $true
+$chkCortes.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkCortes.ForeColor = [System.Drawing.Color]::FromArgb(14, 116, 144)
+$grpModulos.Controls.Add($chkCortes)
 
-# Botão Iniciar
+# Botões
 $btnIniciar = New-Object System.Windows.Forms.Button
-$btnIniciar.Location = New-Object System.Drawing.Point(260, 375)
+$btnIniciar.Location = New-Object System.Drawing.Point(270, 405)
 $btnIniciar.Size = New-Object System.Drawing.Size(220, 42)
 $btnIniciar.Text = "▶ INICIAR PROCESSAMENTO"
 $btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
@@ -159,9 +151,8 @@ $btnIniciar.FlatAppearance.BorderSize = 0
 $btnIniciar.DialogResult = [System.Windows.Forms.DialogResult]::OK
 $form.Controls.Add($btnIniciar)
 
-# Botão Cancelar
 $btnCancelar = New-Object System.Windows.Forms.Button
-$btnCancelar.Location = New-Object System.Drawing.Point(145, 375)
+$btnCancelar.Location = New-Object System.Drawing.Point(155, 405)
 $btnCancelar.Size = New-Object System.Drawing.Size(100, 42)
 $btnCancelar.Text = "Cancelar"
 $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -171,26 +162,22 @@ $form.Controls.Add($btnCancelar)
 $form.AcceptButton = $btnIniciar
 $form.CancelButton = $btnCancelar
 
-# Exibir janela
 $resultadoJanela = $form.ShowDialog()
-
 if ($resultadoJanela -ne [System.Windows.Forms.DialogResult]::OK) {
     Write-Host "[CANCELADO] Processamento cancelado pelo usuario." -ForegroundColor Yellow
     exit 0
 }
 
-# Capturar escolhas do usuário
+# Escolhas
 $dirSaida     = $txtDestino.Text.Trim()
 $fazerAutoCut = $chkAutoCut.Checked
 $fazerHardsub = $chkHardsub.Checked
 $fazerSlides  = $chkSlides.Checked
 $fazerIA      = $chkIA.Checked
+$fazerCortes  = $chkCortes.Checked
 
-if (-not (Test-Path $dirSaida)) {
-    New-Item -ItemType Directory -Path $dirSaida -Force | Out-Null
-}
+if (-not (Test-Path $dirSaida)) { New-Item -ItemType Directory -Path $dirSaida -Force | Out-Null }
 
-# 3. Estrutura técnica de entregáveis
 $pastas = @{
     "1" = Join-Path $dirSaida "1_Legendas"
     "2" = Join-Path $dirSaida "2_Audio_Bruto"
@@ -200,12 +187,10 @@ $pastas = @{
     "6" = Join-Path $dirSaida "6_Documentos"
     "7" = Join-Path $dirSaida "7_Cortes_Timeline"
 }
-
 foreach ($p in $pastas.Values) {
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
 
-# 4. Localizar vídeos brutos
 $videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
 if ($videos.Count -eq 0) {
     $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
@@ -216,19 +201,15 @@ if ($videos.Count -eq 0) {
 }
 
 Write-Host "`n=========================================================" -ForegroundColor Cyan
-Write-Host "   LUIS-MEDIA-TOOLS: PROCESSAMENTO EM EXECUÇÃO           " -ForegroundColor Cyan
+Write-Host "   LUIS-MEDIA-TOOLS: PROCESSAMENTO ULTRA MASTER          " -ForegroundColor Cyan
 Write-Host "   Projeto:      $nomeAula                               " -ForegroundColor Cyan
-Write-Host "   Origem:       $dirEntrada                             " -ForegroundColor Cyan
-Write-Host "   Destino:      $dirSaida                               " -ForegroundColor Cyan
-Write-Host "   Auto-Cut:     $(if($fazerAutoCut){'ATIVO'}else{'DESATIVADO'})" -ForegroundColor Cyan
-Write-Host "   Hardsub:      $(if($fazerHardsub){'ATIVO'}else{'DESATIVADO'})" -ForegroundColor Cyan
-Write-Host "   Slides/PDF:   $(if($fazerSlides){'ATIVO'}else{'DESATIVADO'})"  -ForegroundColor Cyan
-Write-Host "   IA Local:     $(if($fazerIA){'ATIVO'}else{'DESATIVADO'})"      -ForegroundColor Cyan
+Write-Host "   Auto-Cut:     $fazerAutoCut | Hardsub: $fazerHardsub  " -ForegroundColor Cyan
+Write-Host "   Slides:       $fazerSlides  | IA Local: $fazerIA      " -ForegroundColor Cyan
+Write-Host "   Cortes 9:16:  $fazerCortes                            " -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
 
 $ErrorActionPreference = "Continue"
 
-# 5. Processamento por vídeo
 $minutagemArquivo = Join-Path $pastas["6"] "capitulos-youtube.txt"
 $tempoAcumulado = 0.0
 $listaCapitulos = @()
@@ -240,19 +221,19 @@ foreach ($video in $videos) {
 
     Write-Host "`n>>> [PROCESSANDO] $nome ..." -ForegroundColor Green
 
-    # Auto-Cut com transição suave anti-estalo
+    # 1. Auto-Cut
     $videoAlvo = $video.FullName
     if ($fazerAutoCut) {
         $videoDinamico = Join-Path $dirSaida "${nome}_DINAMICO.mp4"
         if (-not (Test-Path $videoDinamico)) {
-            Write-Host "    Fatiando pausas e gerando EDL..." -ForegroundColor DarkYellow
+            Write-Host "    Fatiando pausas com transicao suave..." -ForegroundColor DarkYellow
             & python (Join-Path $raiz "autocut_engine.py") $video.FullName $dirSaida
             Get-ChildItem -Path $dirSaida -Filter "${nome}_timeline_cortes.edl" | Move-Item -Destination $pastas["7"] -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path $videoDinamico) { $videoAlvo = $videoDinamico }
     }
 
-    # Minutagem contínua precisa
+    # 2. Minutagem
     $duracaoStr = (& ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $videoAlvo)
     $duracao = 0.0
     [double]::TryParse($duracaoStr, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$duracao) | Out-Null
@@ -263,20 +244,20 @@ foreach ($video in $videos) {
     $listaCapitulos += "$stamp - $nome"
     $tempoAcumulado += $duracao
 
-    # Extrair Áudio Bruto (16kHz mono)
+    # 3. Audio Bruto
     $audioBrutoTemp = Join-Path $dirTempChunk "$nome.wav"
     if (-not (Test-Path $audioBrutoTemp)) {
         & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
     }
 
-    # Tratamento Profissional Broadcast (EBU R128 + Highpass 80Hz)
+    # 4. Tratamento EBU R128
     $audioTratTemp = Join-Path $dirTempChunk "$($nome)_tratado.wav"
     if (-not (Test-Path $audioTratTemp)) {
-        Write-Host "    Tratando audio (EBU R128)..." -ForegroundColor DarkCyan
+        Write-Host "    Tratando audio (EBU R128 + Limpeza)..." -ForegroundColor DarkCyan
         & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af "highpass=f=80,loudnorm=I=-16:LRA=11:TP=-1.5" $audioTratTemp
     }
 
-    # Transcrição via faster-whisper otimizada para Ryzen CPU
+    # 5. Whisper
     $srtTemp = Join-Path $dirTempChunk "$nome.srt"
     if (-not (Test-Path $srtTemp)) {
         Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
@@ -301,11 +282,11 @@ except Exception:
         python -c $scriptTranscricao
     }
 
-    # Renderização da versão Hardsub (se selecionado)
+    # 6. Hardsub Horizontal
     if ($fazerHardsub -and (Test-Path $srtTemp)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando Hardsub (legenda embutida)..." -ForegroundColor Magenta
+            Write-Host "    Renderizando versao dinamica com Hardsub..." -ForegroundColor Magenta
             $srtFormatado = $srtTemp.Replace("\", "/").Replace(":", "\:")
             $estiloLegenda = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,MarginV=25"
             & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
@@ -314,16 +295,14 @@ except Exception:
         }
     }
 
-    # Copiar para pastas técnicas
     if (Test-Path $srtTemp) { Copy-Item -Path (Join-Path $dirTempChunk "$nome.*") -Destination $pastas["1"] -Force }
     if (Test-Path $audioBrutoTemp) { Copy-Item -Path $audioBrutoTemp -Destination $pastas["2"] -Force }
     if (Test-Path $audioTratTemp) { Copy-Item -Path $audioTratTemp -Destination $pastas["3"] -Force }
 }
 
 $listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
-Write-Host "`n[OK] Minutagem gerada em: $minutagemArquivo" -ForegroundColor Cyan
 
-# 6. Slides e Apostila PDF (se ativado)
+# 7. Slides e Apostila PDF
 if ($fazerSlides) {
     Write-Host "`n>>> [SLIDES] Detectando trocas reais de cena..." -ForegroundColor Cyan
     foreach ($video in $videos) {
@@ -355,28 +334,34 @@ if ($fazerSlides) {
     }
 }
 
-# 7. IA Local Llama (se ativado)
+# 8. IA Local Llama (Resumo e Quiz)
 if ($fazerIA -and (Test-Path (Join-Path $raiz "gerador_ia.py"))) {
     Write-Host "`n>>> [IA LOCAL - LLAMA] Criando Resumo e Quiz..." -ForegroundColor Magenta
     & python (Join-Path $raiz "gerador_ia.py") $dirSaida
 }
 
-# 8. Limpeza de subpastas intermediárias
+# 9. Fatiador Vertical de Melhores Momentos (Cortes 9:16)
+if ($fazerCortes -and (Test-Path (Join-Path $raiz "gerador_cortes.py"))) {
+    Write-Host "`n>>> [CORTES VIRAIS 9:16] Mapeando e renderizando clipes para redes sociais..." -ForegroundColor DarkCyan
+    & python (Join-Path $raiz "gerador_cortes.py") $dirSaida
+}
+
+# 10. Limpeza de subpastas intermediárias
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-# 9. Empacotamento
+# 11. Empacotamento ZIP
 Write-Host "`n>>> [EMPACOTAMENTO] Compactando arquivos tecnicos no ZIP..." -ForegroundColor Cyan
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
 Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"], $pastas["7"] -DestinationPath $arquivoZip -Force
 
-# 10. Limpeza de pastas intermediárias para poupar o SSD
+# 12. Limpeza de pastas intermediárias para poupar o SSD
 if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
     foreach ($p in $pastas.Values) {
         if (Test-Path $p) { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 
-# 11. Mover vídeo bruto original para a raiz do destino
+# 13. Mover video bruto original para o destino
 foreach ($video in $videos) {
     if ($video.DirectoryName -ne $dirSaida) {
         $destinoFinalVideo = Join-Path $dirSaida $video.Name
@@ -384,7 +369,7 @@ foreach ($video in $videos) {
     }
 }
 
-# 12. Limpar pasta de origem se ficou vazia
+# 14. Limpar pasta de origem vazia
 if ((Test-Path $dirEntrada) -and ($dirEntrada -ne $dirSaida) -and ($dirEntrada -ne $raiz)) {
     $itensRestantes = Get-ChildItem -Path $dirEntrada -Force
     if ($itensRestantes.Count -eq 0) {
@@ -392,14 +377,14 @@ if ((Test-Path $dirEntrada) -and ($dirEntrada -ne $dirSaida) -and ($dirEntrada -
     }
 }
 
-# 13. Alertas e Abertura
+# 15. Alertas e Abertura
 [System.Console]::Beep(1000, 300)
 [System.Console]::Beep(1500, 400)
 try {
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
     $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Concluido!"
-    $notify.BalloonTipText = "Projeto [$nomeAula] finalizado com sucesso."
+    $notify.BalloonTipText = "Entregaveis e Cortes 9:16 prontos para publicacao."
     $notify.Visible = $true
     $notify.ShowBalloonTip(4000)
 } catch {}
