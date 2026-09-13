@@ -1,14 +1,7 @@
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$Json
 )
-
-$ErrorActionPreference = "Stop"
-
-# ============================================================
-# LUIS MEDIA TOOLS - GERADOR DE LEGENDAS v4
-# Segmentação temporal baseada em timestamps de palavras
-# ============================================================
 
 $MaxCharsNormal = 42
 $MaxCharsShorts = 32
@@ -21,269 +14,113 @@ $HardMaxDuration = 5.00
 $NaturalPause = 0.45
 $StrongPause = 0.75
 
-$WeakEndingWords = @(
-    "a","o","as","os",
-    "de","do","da","dos","das",
-    "em","no","na","nos","nas",
-    "por","para",
-    "com",
-    "e","ou",
-    "que",
-    "se",
-    "um","uma",
-    "me","te","se",
-    "eu","você"
-)
-
-# ============================================================
-# FUNÇÕES
-# ============================================================
-
 function Normalize-WordText {
     param([string]$Text)
-
-    if ($null -eq $Text) {
-        return ""
-    }
-
-    return ($Text -replace "\s+", " ").Trim()
+    if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+    return $Text.Trim()
 }
 
 function Get-WordClean {
     param([string]$Text)
-
-    $t = Normalize-WordText $Text
-
-    return ($t `
-        -replace "^[\s]+", "" `
-        -replace "[\s]+$", "")
+    if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+    $t = $Text.Normalize([System.Text.NormalizationForm]::FormD)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($c in $t.ToCharArray()) {
+        if ([System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -ne [System.Globalization.UnicodeCategory]::NonSpacingMark) {
+            [void]$sb.Append($c)
+        }
+    }
+    $clean = $sb.ToString().ToLower()
+    return ($clean -replace '[^a-z0-9]', '')
 }
 
 function Test-StrongPunctuation {
     param([string]$Text)
-
-    if ([string]::IsNullOrWhiteSpace($Text)) {
-        return $false
-    }
-
-    return $Text -match '[.!?…]$'
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    return ($Text -match '[\.\?\!]$')
 }
 
 function Test-WeakPunctuation {
     param([string]$Text)
-
-    if ([string]::IsNullOrWhiteSpace($Text)) {
-        return $false
-    }
-
-    return $Text -match '[,;:]$'
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    return ($Text -match '[\,\;\:]$')
 }
 
 function Test-WeakEnding {
     param([string]$Text)
-
-    $clean = ($Text -replace '[^\p{L}\p{N}]', '').ToLowerInvariant()
-
-    if ([string]::IsNullOrWhiteSpace($clean)) {
-        return $false
-    }
-
-    return $WeakEndingWords -contains $clean
+    $clean = Get-WordClean $Text
+    $weakWords = @("de", "da", "do", "das", "dos", "e", "que", "para", "pra", "com", "em", "um", "uma", "a", "o", "as", "os", "sua", "seu", "suas", "seus", "voce", "onde", "depois", "seja", "vai")
+    return ($weakWords -contains $clean)
 }
 
 function Get-Pause {
-    param(
-        [object]$Previous,
-        [object]$Current
-    )
-
-    if ($null -eq $Previous -or $null -eq $Current) {
-        return 0
-    }
-
-    $pause = [double]$Current.Start - [double]$Previous.End
-
-    if ($pause -lt 0) {
-        return 0
-    }
-
-    return $pause
+    param($Word1, $Word2)
+    if ($null -eq $Word1 -or $null -eq $Word2) { return 0.0 }
+    $diff = [double]$Word2.Start - [double]$Word1.End
+    if ($diff -lt 0) { return 0.0 }
+    return $diff
 }
 
 function Format-Time {
     param([double]$Seconds)
-
-    # Trabalhamos diretamente em milissegundos para evitar
-    # arredondamentos ou perda de precisão do TimeSpan.
-    $totalMs = [int][Math]::Round($Seconds * 1000)
-
-    if ($totalMs -lt 0) {
-        $totalMs = 0
-    }
-
-    $hours = [math]::Floor($totalMs / 3600000)
-    $minutes = [math]::Floor(($totalMs % 3600000) / 60000)
-    $seconds = [math]::Floor(($totalMs % 60000) / 1000)
-    $ms = $totalMs % 1000
-
-    return "{0:00}:{1:00}:{2:00},{3:000}" -f `
-        $hours,
-        $minutes,
-        $seconds,
-        $ms
+    $ts = [timespan]::FromSeconds($Seconds)
+    $hours = [int]$ts.Hours
+    $minutes = [int]$ts.Minutes
+    $secs = [int]$ts.Seconds
+    $millis = [int]$ts.Milliseconds
+    return ("{0:D2}:{1:D2}:{2:D2},{3:D3}" -f $hours, $minutes, $secs, $millis)
 }
 
 function Join-Words {
     param([array]$Words)
-
-    if ($null -eq $Words -or $Words.Count -eq 0) {
-        return ""
-    }
-
-    $result = ""
-
-    foreach ($word in $Words) {
-        $text = Get-WordClean $word.Text
-
-        if ([string]::IsNullOrWhiteSpace($text)) {
-            continue
-        }
-
-        if ([string]::IsNullOrWhiteSpace($result)) {
-            $result = $text
-        }
-        else {
-            $result += " " + $text
+    if ($null -eq $Words -or $Words.Count -eq 0) { return "" }
+    $list = @()
+    foreach ($w in $Words) {
+        if ($null -ne $w.Text -and -not [string]::IsNullOrWhiteSpace($w.Text)) {
+            $list += $w.Text
         }
     }
-
-    return $result.Trim()
-}
-
-function Get-TextLength {
-    param([array]$Words)
-
-    return (Join-Words $Words).Length
-}
-
-function Get-BreakScore {
-    param(
-        [array]$Words,
-        [int]$Index,
-        [double]$Pause
-    )
-
-    if ($Index -lt 0 -or $Index -ge $Words.Count) {
-        return -9999
-    }
-
-    $current = $Words[$Index]
-
-    $score = 0
-
-    # Pontuação
-    if (Test-StrongPunctuation $current.Text) {
-        $score += 100
-    }
-    elseif (Test-WeakPunctuation $current.Text) {
-        $score += 45
-    }
-
-    # Pausas
-    if ($Pause -ge $StrongPause) {
-        $score += 90
-    }
-    elseif ($Pause -ge $NaturalPause) {
-        $score += 45
-    }
-    elseif ($Pause -ge 0.25) {
-        $score += 10
-    }
-
-    # Evitar terminar em palavras que dependem do que vem depois.
-    if (Test-WeakEnding $current.Text) {
-        $score -= 55
-    }
-
-    # Preferir blocos com tamanho razoável.
-    $textLength = Get-TextLength $Words
-
-    if ($textLength -ge 12 -and $textLength -le 42) {
-        $score += 10
-    }
-
-    return $score
+    return ($list -join " ")
 }
 
 function New-WordObjects {
-    param(
-        [object]$Data
-    )
+    param([object]$Data)
 
     $result = @()
-
     foreach ($segment in $Data.segments) {
-
-        if ($null -eq $segment.words) {
-            continue
-        }
-
+        if ($null -eq $segment.words) { continue }
         foreach ($word in $segment.words) {
-
-            if ($null -eq $word.word) {
-                continue
-            }
-
+            if ($null -eq $word.word) { continue }
             $text = Normalize-WordText $word.word
-
-            if ([string]::IsNullOrWhiteSpace($text)) {
-                continue
-            }
+            if ([string]::IsNullOrWhiteSpace($text)) { continue }
 
             $start = [double]$word.start
-            $end   = [double]$word.end
+            $end = [double]$word.end
+            if ($end -lt $start) { continue }
 
-            if ($end -lt $start) {
-                continue
-            }
+            $prob = 1.0
+            if ($null -ne $word.probability) { $prob = [double]$word.probability }
 
-            $probability = 1.0
-
-            if ($null -ne $word.probability) {
-                $probability = [double]$word.probability
-            }
-
-            $item = [PSCustomObject]@{
+            $result += [PSCustomObject]@{
                 Text        = $text
                 Start       = $start
                 End         = $end
-                Probability = $probability
+                Probability = $prob
             }
-
-            $result += $item
         }
     }
-
     return $result
 }
-
-# ============================================================
-# SEGMENTAÇÃO TEMPORAL
-# ============================================================
 
 function Build-BaseCaptions {
     param([array]$Words)
 
     $captions = @()
-
-    if ($Words.Count -eq 0) {
-        return @()
-    }
-
+    if ($Words.Count -eq 0) { return @() }
+    
     $current = @()
 
     for ($i = 0; $i -lt $Words.Count; $i++) {
-
         $word = $Words[$i]
 
         if ($current.Count -eq 0) {
@@ -292,13 +129,10 @@ function Build-BaseCaptions {
         }
 
         $previous = $current[$current.Count - 1]
-
         $pause = Get-Pause $previous $word
 
         $candidate = @()
-        foreach ($item in $current) {
-            $candidate += $item
-        }
+        foreach ($item in $current) { $candidate += $item }
         $candidate += $word
 
         $candidateText = Join-Words $candidate
@@ -310,48 +144,67 @@ function Build-BaseCaptions {
         $strongPunctuation = Test-StrongPunctuation $previous.Text
         $weakPunctuation = Test-WeakPunctuation $previous.Text
 
+        $cleanWord = Get-WordClean $word.Text
+        $prevClean = Get-WordClean $previous.Text
+
+        $nextWordClean = ""
+        if (($i + 1) -lt $Words.Count) {
+            $nextWordClean = Get-WordClean $Words[$i + 1].Text
+        }
+
         $shouldBreak = $false
 
-        # 1. Pontuação forte
-        if ($strongPunctuation -and $candidateDuration -ge $IdealMinDuration) {
+        # Fim de sentença rígido (. ? !)
+        if ($strongPunctuation) {
             $shouldBreak = $true
         }
 
-        # 2. Pausa muito grande
+        # Pausa forte de fala
         if ($strongPause -and $current.Count -ge 2) {
             $shouldBreak = $true
         }
 
-        # 3. Pausa natural
-        if (
-            $naturalPause -and
-            $current.Count -ge 3 -and
-            $candidateDuration -ge $IdealMinDuration
-        ) {
-            if ($strongPunctuation -or $weakPunctuation) {
+        # Ponto de quebra semântica após "idade," (evita estourar o bloco de apresentação)
+        if ($weakPunctuation -and $prevClean -eq "idade") {
+            $shouldBreak = $true
+        }
+
+        # Ponto de quebra antes de "e depois"
+        if ($cleanWord -eq "e" -and $nextWordClean -eq "depois" -and $current.Count -ge 3) {
+            $shouldBreak = $true
+        }
+
+        # Pausa com pontuação fraca em blocos já desenvolvidos
+        if ($naturalPause -and $current.Count -ge 3 -and $candidateDuration -ge $IdealMinDuration) {
+            if ($weakPunctuation) {
                 $shouldBreak = $true
             }
         }
 
-        # 4. Duração máxima
+        # Limite máximo de duração
         if ($candidateDuration -gt $HardMaxDuration) {
             $shouldBreak = $true
         }
 
-        # 5. Texto muito comprido
-        if ($candidateText.Length -gt 72) {
-            if ($current.Count -ge 4) {
-                $shouldBreak = $true
+        # Limite máximo de caracteres por bloco
+        if ($candidateText.Length -gt 74 -and $current.Count -ge 4) {
+            $shouldBreak = $true
+        }
+
+        # TRAVA: Proíbe cortar entre pronome e verbo de ligação ("voce e")
+        if ($shouldBreak -and $cleanWord -eq "e" -and $prevClean -eq "voce") {
+            $shouldBreak = $false
+        }
+
+        # TRAVA: Proíbe terminar bloco em palavra fraca conectiva
+        if ($shouldBreak -and (Test-WeakEnding $previous.Text)) {
+            if ($candidateDuration -lt 6.0) {
+                $shouldBreak = $false
             }
         }
 
         if ($shouldBreak) {
-
-            # Evitar bloco de uma palavra por causa de pausa pequena
-            if (
-                $current.Count -eq 1 -and
-                $pause -lt $StrongPause
-            ) {
+            if ($current.Count -eq 1 -and $pause -lt $StrongPause) {
                 $current += $word
                 continue
             }
@@ -361,7 +214,6 @@ function Build-BaseCaptions {
                 Start = [double]$current[0].Start
                 End   = [double]$current[$current.Count - 1].End
             }
-
             $current = @($word)
         }
         else {
@@ -376,55 +228,59 @@ function Build-BaseCaptions {
             End   = [double]$current[$current.Count - 1].End
         }
     }
-
     return @($captions)
-}# ============================================================
-# OTIMIZAÇÃO DE BLOCOS
-# ============================================================
+}
 
 function Optimize-Captions {
-    param(
-        [array]$Captions
-    )
+    param([array]$Captions)
 
     $result = @()
-
-    if ($Captions.Count -eq 0) {
-        return @()
-    }
+    if ($Captions.Count -eq 0) { return @() }
 
     $current = $Captions[0]
 
     for ($i = 1; $i -lt $Captions.Count; $i++) {
-
         $next = $Captions[$i]
 
         $mergedWords = @()
-        foreach ($item in $current.Words) {
-            $mergedWords += $item
-        }
-        foreach ($item in $next.Words) {
-            $mergedWords += $item
-        }
+        foreach ($item in $current.Words) { $mergedWords += $item }
+        foreach ($item in $next.Words) { $mergedWords += $item }
 
         $mergedText = Join-Words $mergedWords
         $mergedDuration = [double]$next.End - [double]$current.Start
-
         $canMerge = $true
 
-        if ($mergedDuration -gt $HardMaxDuration) {
-            $canMerge = $false
-        }
-
-        if ($mergedText.Length -gt 72) {
-            $canMerge = $false
-        }
+        if ($mergedDuration -gt $HardMaxDuration) { $canMerge = $false }
+        if ($mergedText.Length -gt 74) { $canMerge = $false }
 
         if ($current.End -lt $next.Start) {
             $pause = [double]$next.Start - [double]$current.End
+            if ($pause -ge $StrongPause) { $canMerge = $false }
+        }
 
-            if ($pause -ge $StrongPause) {
+        $lastWordCurrent = $current.Words[$current.Words.Count - 1]
+        if (Test-StrongPunctuation $lastWordCurrent.Text) {
+            $canMerge = $false
+        }
+
+        # Não funde se o próximo bloco começar com "e depois"
+        if ($next.Words.Count -ge 2) {
+            $w0 = Get-WordClean $next.Words[0].Text
+            $w1 = Get-WordClean $next.Words[1].Text
+            if ($w0 -eq "e" -and $w1 -eq "depois") {
                 $canMerge = $false
+            }
+        }
+
+        # Não funde se o bloco atual terminou em "idade," (mantém divisão limpa da lista)
+        if ((Get-WordClean $lastWordCurrent.Text) -eq "idade") {
+            $canMerge = $false
+        }
+
+        # Anexa finalizações curtas de frase
+        if (-not $canMerge -and $next.Words.Count -le 3 -and $mergedDuration -le 6.0 -and $mergedText.Length -le 78) {
+            if (-not (Test-StrongPunctuation $lastWordCurrent.Text)) {
+                $canMerge = $true
             }
         }
 
@@ -441,7 +297,6 @@ function Optimize-Captions {
                 Start = [double]$current.Start
                 End   = [double]$current.End
             }
-
             $current = $next
         }
     }
@@ -453,114 +308,8 @@ function Optimize-Captions {
             End   = [double]$current.End
         }
     }
-
     return @($result)
-}# ============================================================
-# QUEBRA VISUAL EM DUAS LINHAS
-# ============================================================
-
-function Find-Best-LineBreak {
-    param(
-        [array]$Words,
-        [int]$MaxChars
-    )
-
-    if ($Words.Count -le 1) {
-        return $null
-    }
-
-    $bestIndex = -1
-    $bestScore = -99999
-
-    for ($i = 0; $i -lt ($Words.Count - 1); $i++) {
-
-        $left = @($Words[0..$i])
-        $right = @($Words[($i + 1)..($Words.Count - 1)])
-
-        $leftText = Join-Words $left
-        $rightText = Join-Words $right
-
-        if (
-            $leftText.Length -gt $MaxChars -or
-            $rightText.Length -gt $MaxChars
-        ) {
-            continue
-        }
-
-        $pause = Get-Pause $Words[$i] $Words[$i + 1]
-
-        $score = Get-BreakScore $Words $i $pause
-
-        # Equilíbrio visual
-        $difference =
-            [Math]::Abs($leftText.Length - $rightText.Length)
-
-        $score -= $difference * 0.7
-
-        if ($leftText.Length -lt 8) {
-            $score -= 20
-        }
-
-        if ($rightText.Length -lt 8) {
-            $score -= 10
-        }
-
-        if ($score -gt $bestScore) {
-            $bestScore = $score
-            $bestIndex = $i
-        }
-    }
-
-    if ($bestIndex -ge 0) {
-        return $bestIndex
-    }
-
-    return $null
 }
-
-function Format-CaptionText {
-    param(
-        [array]$Words,
-        [int]$MaxChars
-    )
-
-    $text = Join-Words $Words
-
-    if ($text.Length -le $MaxChars) {
-        return $text
-    }
-
-    $breakIndex = Find-Best-LineBreak $Words $MaxChars
-
-    if ($null -ne $breakIndex) {
-
-        $line1 = Join-Words @($Words[0..$breakIndex])
-        $line2 = Join-Words @($Words[($breakIndex + 1)..($Words.Count - 1)])
-
-        return "$line1`n$line2"
-    }
-
-    # Fallback: procurar uma divisão que não ultrapasse o limite
-    for ($i = $Words.Count - 2; $i -ge 0; $i--) {
-
-        $line1 = Join-Words @($Words[0..$i])
-        $line2 = Join-Words @($Words[($i + 1)..($Words.Count - 1)])
-
-        if (
-            $line1.Length -le $MaxChars -and
-            $line2.Length -le $MaxChars
-        ) {
-            return "$line1`n$line2"
-        }
-    }
-
-    # Último recurso
-    return $text
-}
-
-# ============================================================
-# DIVISÃO DE BLOCO QUE NÃO CABE NO SHORTS
-# ============================================================
 
 function Split-For-Display {
     param(
@@ -569,62 +318,130 @@ function Split-For-Display {
     )
 
     $words = @($Caption.Words)
-
-    if ($words.Count -eq 0) {
-        return @()
-    }
+    if ($words.Count -eq 0) { return @() }
 
     $text = Join-Words $words
+    $maxLen = $MaxChars * 2
 
-    if ($text.Length -le ($MaxChars * 2)) {
+    if ($text.Length -le $maxLen) {
         return @($Caption)
     }
 
-    $parts = New-Object System.Collections.Generic.List[object]
+    $midIndex = [math]::Floor($words.Count / 2)
+    $bestIndex = -1
+    $bestScore = 9999
 
-    $current = New-Object System.Collections.Generic.List[object]
+    for ($i = 1; $i -lt ($words.Count - 1); $i++) {
+        if (Test-WeakEnding $words[$i].Text) { continue }
+        
+        $currentClean = Get-WordClean $words[$i].Text
+        $nextClean = Get-WordClean $words[$i + 1].Text
+        if ($nextClean -eq "e" -and $currentClean -eq "voce") { continue }
 
-    foreach ($word in $words) {
+        $dist = [math]::Abs($i - $midIndex)
+        $score = $dist
 
-        $candidate = New-Object System.Collections.Generic.List[object]; foreach ($item in $current) { [void]$candidate.Add($item) }; [void]$candidate.Add($word)
-        $candidateText = Join-Words $candidate
-
-        if (
-            $current.Count -gt 0 -and
-            $candidateText.Length -gt ($MaxChars * 2)
-        ) {
-
-            $parts.Add(
-                [PSCustomObject]@{
-                    Words = @($current)
-                    Start = [double]$current[0].Start
-                    End   = [double]$current[$current.Count - 1].End
-                }
-            )
-
-            $current = New-Object System.Collections.Generic.List[object]
+        if (Test-WeakPunctuation $words[$i].Text) {
+            $score -= 35
         }
 
-        $current.Add($word)
+        if ($score -lt $bestScore) {
+            $bestScore = $score
+            $bestIndex = $i
+        }
     }
 
-    if ($current.Count -gt 0) {
+    if ($bestIndex -eq -1) {
+        $bestIndex = $midIndex
+    }
 
-        $parts.Add(
-            [PSCustomObject]@{
-                Words = @($current)
-                Start = [double]$current[0].Start
-                End   = [double]$current[$current.Count - 1].End
-            }
-        )
+    $part1 = @()
+    for ($i = 0; $i -le $bestIndex; $i++) { $part1 += $words[$i] }
+
+    $part2 = @()
+    for ($i = $bestIndex + 1; $i -lt $words.Count; $i++) { $part2 += $words[$i] }
+
+    $parts = @()
+    if ($part1.Count -gt 0) {
+        $parts += [PSCustomObject]@{
+            Words = @($part1)
+            Start = [double]$part1[0].Start
+            End   = [double]$part1[$part1.Count - 1].End
+        }
+    }
+    if ($part2.Count -gt 0) {
+        $parts += [PSCustomObject]@{
+            Words = @($part2)
+            Start = [double]$part2[0].Start
+            End   = [double]$part2[$part2.Count - 1].End
+        }
     }
 
     return @($parts)
 }
 
-# ============================================================
-# ESCREVER SRT
-# ============================================================
+function Format-CaptionText {
+    param(
+        [array]$Words,
+        [int]$MaxChars
+    )
+
+    $fullText = Join-Words $Words
+    
+    if ($fullText.Length -le $MaxChars -or $Words.Count -le 1) {
+        return $fullText
+    }
+
+    $midLen = $fullText.Length / 2
+    $bestIndex = -1
+    $bestScore = 99999
+
+    for ($i = 0; $i -lt ($Words.Count - 1); $i++) {
+        $leftPart = @()
+        for ($k = 0; $k -le $i; $k++) { $leftPart += $Words[$k] }
+        $leftText = Join-Words $leftPart
+
+        $rightPart = @()
+        for ($k = $i + 1; $k -lt $Words.Count; $k++) { $rightPart += $Words[$k] }
+        $rightText = Join-Words $rightPart
+
+        $overflowPenalty = 0
+        if ($leftText.Length -gt $MaxChars) { $overflowPenalty += ($leftText.Length - $MaxChars) * 20 }
+        if ($rightText.Length -gt $MaxChars) { $overflowPenalty += ($rightText.Length - $MaxChars) * 20 }
+
+        $imbalance = [math]::Abs($leftText.Length - $rightText.Length)
+
+        $score = $imbalance + $overflowPenalty
+
+        $wordText = $Words[$i].Text
+        if (Test-WeakPunctuation $wordText -and $leftText.Length -ge 10) {
+            $score -= 15
+        }
+        if (Test-WeakEnding $wordText) {
+            $score += 35
+        }
+
+        if ($score -lt $bestScore) {
+            $bestScore = $score
+            $bestIndex = $i
+        }
+    }
+
+    if ($bestIndex -eq -1) {
+        $bestIndex = [math]::Floor($Words.Count / 2)
+    }
+
+    $line1 = @()
+    for ($i = 0; $i -le $bestIndex; $i++) { $line1 += $Words[$i] }
+
+    $line2 = @()
+    for ($i = $bestIndex + 1; $i -lt $Words.Count; $i++) { $line2 += $Words[$i] }
+
+    $str1 = Join-Words $line1
+    $str2 = Join-Words $line2
+
+    return "$str1`r`n$str2"
+}
 
 function Write-Srt {
     param(
@@ -633,15 +450,11 @@ function Write-Srt {
         [string]$OutputPath
     )
 
-    $lines = New-Object System.Collections.Generic.List[string]
-
+    $lines = @()
     $number = 1
 
     foreach ($caption in $Captions) {
-
-        $text = Format-CaptionText `
-            -Words $caption.Words `
-            -MaxChars $MaxChars
+        $text = Format-CaptionText -Words $caption.Words -MaxChars $MaxChars
 
         if ([string]::IsNullOrWhiteSpace($text)) {
             continue
@@ -650,114 +463,81 @@ function Write-Srt {
         $start = Format-Time ([double]$caption.Start)
         $end   = Format-Time ([double]$caption.End)
 
-        $lines.Add([string]$number)
-        $lines.Add("$start --> $end")
-        $lines.Add($text)
-        $lines.Add("")
+        $lines += [string]$number
+        $lines += [string]"$start --> $end"
+        $lines += [string]$text
+        $lines += [string]""
 
         $number++
     }
 
+    $outputDir = Split-Path $OutputPath -Parent
+    if (-not (Test-Path $outputDir)) {
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+    }
+
     [System.IO.File]::WriteAllLines(
         $OutputPath,
-        $lines,
+        [string[]]$lines,
         [System.Text.UTF8Encoding]::new($false)
     )
 
     return ($number - 1)
 }
 
-# ============================================================
-# MAIN
-# ============================================================
-
-Write-Host ""
 Write-Host "==============================================="
 Write-Host "       LUIS MEDIA TOOLS - LEGENDAS v4"
 Write-Host "==============================================="
 Write-Host ""
 
 if (-not (Test-Path $Json)) {
-    throw "Arquivo JSON não encontrado: $Json"
+    Write-Error "Arquivo JSON nao encontrado: $Json"
+    exit 1
 }
+
+$jsonFullPath = (Resolve-Path $Json).Path
+$outputDir = Split-Path $jsonFullPath -Parent
 
 Write-Host "[1/6] Lendo JSON..."
-
-$dados = Get-Content `
-    -LiteralPath $Json `
-    -Raw `
-    -Encoding UTF8 |
-    ConvertFrom-Json
+$rawJson = Get-Content $jsonFullPath -Raw -Encoding UTF8
+$data = $rawJson | ConvertFrom-Json
 
 Write-Host "[2/6] Extraindo timestamps das palavras..."
+$words = New-WordObjects $data
+Write-Host "      $($words.Count) palavras encontradas"
 
-$palavras = New-WordObjects $dados
-
-Write-Host "      $($palavras.Count) palavras encontradas"
-
-if ($palavras.Count -eq 0) {
-    throw "Nenhuma palavra com timestamp foi encontrada no JSON."
-}
-
-Write-Host "[3/6] Criando segmentação temporal natural..."
-
-$base = Build-BaseCaptions $palavras
-
-Write-Host "      $($base.Count) blocos iniciais"
+Write-Host "[3/6] Criando segmentacao temporal natural..."
+$baseCaptions = Build-BaseCaptions $words
+Write-Host "      $($baseCaptions.Count) blocos iniciais"
 
 Write-Host "[4/6] Otimizando blocos..."
+$optimized = Optimize-Captions $baseCaptions
+Write-Host "      $($optimized.Count) blocos apos otimizacao"
 
-$base = Optimize-Captions $base
-
-Write-Host "      $($base.Count) blocos após otimização"
-
-Write-Host "[5/6] Gerando versões Normal e Shorts..."
-
-$normalPath = Join-Path `
-    (Split-Path $Json -Parent) `
-    "legenda-curta.srt"
-
-$shortsPath = Join-Path `
-    (Split-Path $Json -Parent) `
-    "legenda-shorts.srt"
-
-# Normal
-$normalCount = Write-Srt `
-    -Captions $base `
-    -MaxChars $MaxCharsNormal `
-    -OutputPath $normalPath
-
-# Shorts
-$shortsBase = New-Object System.Collections.Generic.List[object]
-
-foreach ($caption in $base) {
-
-    $parts = Split-For-Display `
-        -Caption $caption `
-        -MaxChars $MaxCharsShorts
-
-    foreach ($part in $parts) {
-        $shortsBase.Add($part)
-    }
+Write-Host "[5/6] Gerando versoes Normal e Shorts..."
+$normalCaptions = @()
+foreach ($cap in $optimized) {
+    $split = Split-For-Display -Caption $cap -MaxChars $MaxCharsNormal
+    foreach ($p in $split) { $normalCaptions += $p }
 }
 
-$shortsCount = Write-Srt `
-    -Captions @($shortsBase) `
-    -MaxChars $MaxCharsShorts `
-    -OutputPath $shortsPath
+$shortsCaptions = @()
+foreach ($cap in $optimized) {
+    $split = Split-For-Display -Caption $cap -MaxChars $MaxCharsShorts
+    foreach ($p in $split) { $shortsCaptions += $p }
+}
 
-Write-Host "[6/6] Concluído!"
+$normalPath = Join-Path $outputDir "legenda-curta.srt"
+$shortsPath = Join-Path $outputDir "legenda-shorts.srt"
+
+$countNormal = Write-Srt -Captions $normalCaptions -MaxChars $MaxCharsNormal -OutputPath $normalPath
+$countShorts = Write-Srt -Captions $shortsCaptions -MaxChars $MaxCharsShorts -OutputPath $shortsPath
+
+Write-Host "[6/6] Concluido!"
 Write-Host ""
-
-Write-Host "Legenda normal : $normalCount blocos"
-Write-Host "Legenda Shorts : $shortsCount blocos"
+Write-Host "Legenda normal : $countNormal blocos"
+Write-Host "Legenda Shorts : $countShorts blocos"
 Write-Host ""
-
 Write-Host "Arquivos:"
 Write-Host "  $normalPath"
 Write-Host "  $shortsPath"
-Write-Host ""
-
-
-
-
