@@ -57,7 +57,7 @@ if (-not (Test-Path $dirSaida)) {
     New-Item -ItemType Directory -Path $dirSaida -Force | Out-Null
 }
 
-# 3. Estrutura temporaria de entregaveis (pastas 1 a 6)
+# 3. Estrutura temporaria de entregaveis (pastas 1 a 7)
 $pastas = @{
     "1" = Join-Path $dirSaida "1_Legendas"
     "2" = Join-Path $dirSaida "2_Audio_Bruto"
@@ -65,17 +65,18 @@ $pastas = @{
     "4" = Join-Path $dirSaida "4_Slides_Extraidos"
     "5" = Join-Path $dirSaida "5_Editorial"
     "6" = Join-Path $dirSaida "6_Documentos"
+    "7" = Join-Path $dirSaida "7_Cortes_Timeline"
 }
 
 foreach ($p in $pastas.Values) {
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
 
-# 4. Varredura de vídeos (na origem ou no destino, se ja movidos)
-$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Sort-Object Name
+# 4. Varredura de vídeos (ignora os videos ja fatiados _sem_silencio)
+$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "_sem_silencio" } | Sort-Object Name
 
 if ($videos.Count -eq 0) {
-    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Sort-Object Name
+    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "_sem_silencio" } | Sort-Object Name
     if ($videos.Count -eq 0) {
         Write-Host "[AVISO] Nenhum video compativel encontrado em $dirEntrada ou $dirSaida" -ForegroundColor Yellow
         exit 0
@@ -83,7 +84,7 @@ if ($videos.Count -eq 0) {
 }
 
 Write-Host "`n=========================================================" -ForegroundColor Cyan
-Write-Host "   LUIS-MEDIA-TOOLS: CONSOLIDACAO DEFINITIVA + LLAMA     " -ForegroundColor Cyan
+Write-Host "   LUIS-MEDIA-TOOLS: PIPELINE MASTER AUTOCUT + LLAMA     " -ForegroundColor Cyan
 Write-Host "   Projeto: $nomeAula                                    " -ForegroundColor Cyan
 Write-Host "   Origem:  $dirEntrada                                  " -ForegroundColor Cyan
 Write-Host "   Destino: $dirSaida                                    " -ForegroundColor Cyan
@@ -126,20 +127,20 @@ foreach ($video in $videos) {
 
     Write-Host "`n>>> [PROCESSANDO] $nome ..." -ForegroundColor Green
 
-    # Audio Bruto (16kHz mono)
+    # 1. Extração de Audio Bruto (16kHz mono)
     $audioBrutoTemp = Join-Path $dirTempChunk "$nome.wav"
     if (-not (Test-Path $audioBrutoTemp)) {
         & ffmpeg -hide_banner -loglevel error -y -i $video.FullName -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
     }
 
-    # Tratamento Broadcast EBU R128 + Highpass 80Hz
+    # 2. Tratamento Broadcast EBU R128 + Highpass 80Hz
     $audioTratTemp = Join-Path $dirTempChunk "$($nome)_tratado.wav"
     if (-not (Test-Path $audioTratTemp)) {
         Write-Host "    Tratando audio (Filtros EBU R128 + Limpeza)..." -ForegroundColor DarkCyan
         & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af "highpass=f=80,loudnorm=I=-16:LRA=11:TP=-1.5" $audioTratTemp
     }
 
-    # Transcricao via faster-whisper otimizada para Ryzen CPU
+    # 3. Transcricao via faster-whisper (Ryzen CPU / int8)
     $srtTemp = Join-Path $dirTempChunk "$nome.srt"
     if (-not (Test-Path $srtTemp)) {
         Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
@@ -164,6 +165,12 @@ except Exception:
         python -c $scriptTranscricao
     }
 
+    # 4. Auto-Cut de Silêncio e Timeline EDL
+    if (Test-Path (Join-Path $raiz "autocut_engine.py")) {
+        Write-Host "    Detectando silencios e gerando EDL..." -ForegroundColor DarkYellow
+        & python (Join-Path $raiz "autocut_engine.py") $video.FullName $pastas["7"]
+    }
+
     # Copia para as pastas consolidadas
     if (Test-Path $srtTemp) { Copy-Item -Path (Join-Path $dirTempChunk "$nome.*") -Destination $pastas["1"] -Force }
     if (Test-Path $audioBrutoTemp) { Copy-Item -Path $audioBrutoTemp -Destination $pastas["2"] -Force }
@@ -174,13 +181,25 @@ except Exception:
 $listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
 Write-Host "[OK] Minutagem gerada em: $minutagemArquivo" -ForegroundColor Cyan
 
-# 6. Slides
+# 6. Slides Inteligentes (Scene Detection)
 $slidesCount = (Get-ChildItem -Path $pastas["4"] -Include "*.jpg","*.png" -Recurse -ErrorAction SilentlyContinue).Count
 if ($slidesCount -eq 0) {
-    Write-Host "`n>>> [SLIDES] Extraindo frames visuais..." -ForegroundColor Cyan
+    Write-Host "`n>>> [SLIDES] Detectando trocas reais de slides com FFmpeg..." -ForegroundColor Cyan
     foreach ($video in $videos) {
-        $slideDestino = Join-Path $pastas["4"] "$($video.BaseName)-slide.jpg"
-        & ffmpeg -hide_banner -loglevel error -y -ss 00:00:05 -i $video.FullName -vframes 1 -q:v 2 $slideDestino
+        $prefixo = $video.BaseName
+        $padraoSaida = Join-Path $pastas["4"] "${prefixo}_slide_%03d.jpg"
+        
+        & ffmpeg -hide_banner -loglevel error -y -i $video.FullName `
+            -vf "select='gt(scene,0.25)',mpdecimate" `
+            -vsync vfr -q:v 2 $padraoSaida
+            
+        $gerados = Get-ChildItem -Path $pastas["4"] -Filter "${prefixo}_slide_*.jpg"
+        if ($gerados.Count -eq 0) {
+            $slideFallback = Join-Path $pastas["4"] "${prefixo}_slide_001.jpg"
+            & ffmpeg -hide_banner -loglevel error -y -ss 00:00:05 -i $video.FullName -vframes 1 -q:v 2 $slideFallback
+        } else {
+            Write-Host "    [OK] $($gerados.Count) slide(s) extraido(s) de $prefixo" -ForegroundColor DarkCyan
+        }
     }
 }
 
@@ -211,13 +230,13 @@ if (Test-Path (Join-Path $raiz "gerador_ia.py")) {
     & python (Join-Path $raiz "gerador_ia.py") $dirSaida
 }
 
-# 9. Limpeza de subpastas intermediarias de processamento
+# 9. Limpeza de subpastas temporarias
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-# 10. Empacotamento dos entregaveis (pastas 1 a 6)
+# 10. Empacotamento dos entregaveis (pastas 1 a 7)
 Write-Host "`n>>> [EMPACOTAMENTO] Gerando entregavel ZIP..." -ForegroundColor Cyan
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
-Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"] -DestinationPath $arquivoZip -Force
+Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"], $pastas["7"] -DestinationPath $arquivoZip -Force
 
 # 11. Faxina de intermediarios (SSD protegido)
 if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
@@ -227,13 +246,13 @@ if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
     }
 }
 
-# 12. Mover videos para a raiz do destino
-Write-Host "`n>>> [CONSOLIDACAO] Movendo videos diretamente para o destino final..." -ForegroundColor Cyan
+# 12. Mover videos brutos e fatiados para a raiz do destino
+Write-Host "`n>>> [CONSOLIDACAO] Movendo videos para o destino final..." -ForegroundColor Cyan
 foreach ($video in $videos) {
     if ($video.DirectoryName -ne $dirSaida) {
         $destinoFinalVideo = Join-Path $dirSaida $video.Name
         Move-Item -LiteralPath $video.FullName -Destination $destinoFinalVideo -Force
-        Write-Host "    Movido: $($video.Name) -> $dirSaida" -ForegroundColor Gray
+        Write-Host "    Movido bruto: $($video.Name)" -ForegroundColor Gray
     }
 }
 
@@ -253,8 +272,8 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
-    $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Consolidado!"
-    $notify.BalloonTipText = "Videos, entregaveis, Resumo e Quiz gerados em [$nomeAula]."
+    $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Completo!"
+    $notify.BalloonTipText = "Videos, Auto-Cut EDL, Resumo e Quiz gerados em [$nomeAula]."
     $notify.Visible = $true
     $notify.ShowBalloonTip(4000)
 } catch {}
@@ -263,7 +282,7 @@ try {
 explorer.exe $dirSaida
 
 Write-Host "`n=========================================================" -ForegroundColor Green
-Write-Host "   PROJETO CONSOLIDADO COM SUCESSO!                     " -ForegroundColor Green
+Write-Host "   PIPELINE FINALIZADO COM SUCESSO!                     " -ForegroundColor Green
 Write-Host "   Local Final: $dirSaida                               " -ForegroundColor Green
 Write-Host "   Entregavel:  $arquivoZip                             " -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
