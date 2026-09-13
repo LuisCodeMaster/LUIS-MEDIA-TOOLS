@@ -19,7 +19,6 @@ def chamar_ollama(prompt, model="llama3.2:3b"):
             res = json.loads(response.read().decode("utf-8"))
             return res.get("response", "")
     except Exception as e:
-        print(f"    [ERRO OLLAMA] Nao foi possivel comunicar com o Llama: {e}")
         return None
 
 def srt_para_texto(caminho_srt):
@@ -29,7 +28,6 @@ def srt_para_texto(caminho_srt):
     with open(caminho_srt, "r", encoding="utf-8", errors="ignore") as f:
         conteudo = f.read()
 
-    # Regex para capturar timestamp e texto
     padrao = re.compile(r"(\d+)\s*\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*\n(.*?)(?=\n\s*\n|\Z)", re.DOTALL)
     for match in padrao.finditer(conteudo):
         idx, t_in, t_out, txt = match.groups()
@@ -51,36 +49,29 @@ def identificar_melhores_momentos(blocos):
     amostra_srt = ""
     for b in blocos:
         amostra_srt += f"[{b['in']} -> {b['out']}] {b['txt']}\n"
-    
-    # Limita tamanho para a CPU rodar rápido
     amostra_srt = amostra_srt[:14000]
 
-    prompt = f"""Voce e um especialista em marketing de conteudo e editor de cortes para TikTok, Reels e Shorts.
-Analise a transcricao com timestamps abaixo e selecione os 3 trechos mais impactantes, diretos e interessantes para video curto (duracao de cada trecho entre 25 e 60 segundos).
-
-Retorne OBRIGATORIAMENTE um JSON com a seguinte chave:
+    prompt = f"""Voce e um especialista em marketing de conteudo. Analise a transcricao e selecione os 3 trechos mais impactantes para video curto (entre 25 e 60 segundos).
+Retorne OBRIGATORIAMENTE um JSON com a chave "cortes":
 {{
   "cortes": [
     {{
-      "titulo": "Titulo chamativo sem acentos ou caracteres especiais",
+      "titulo": "Titulo chamativo sem acentos",
       "inicio": "00:00:00.000",
       "fim": "00:00:35.000"
     }}
   ]
 }}
-
 Transcricao:
 {amostra_srt}
 """
     resposta = chamar_ollama(prompt)
     if not resposta:
         return []
-
     try:
         dados = json.loads(resposta)
         return dados.get("cortes", [])
     except Exception:
-        # Fallback de seguranca caso o JSON venha truncado
         return []
 
 def extrair_srt_parcial(caminho_srt_orig, start_sec, end_sec, caminho_srt_dest):
@@ -91,7 +82,6 @@ def extrair_srt_parcial(caminho_srt_orig, start_sec, end_sec, caminho_srt_dest):
             s_in = timecode_para_segundos(b["in"])
             s_out = timecode_para_segundos(b["out"])
             if s_out >= start_sec and s_in <= end_sec:
-                # Ajusta timestamp relativo ao inicio do corte (t=0)
                 rel_in = max(0.0, s_in - start_sec)
                 rel_out = min(end_sec - start_sec, s_out - start_sec)
                 
@@ -110,13 +100,13 @@ def renderizar_corte_vertical(video_orig, start_tc, end_tc, srt_corte, video_sai
     if duracao <= 5:
         return
 
-    srt_escapado = srt_corte.replace("\\", "/").replace(":", "\\:")
-    estilo = "FontName=Arial,FontSize=22,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,MarginV=120"
+    srt_escapado = srt_corte.replace("\\", "/").replace(":", "\:")
+    # Estilo Netflix para Shorts/Reels (Arial Black centralizada com fundo escuro e contorno)
+    estilo = "FontName=Arial Black,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=1,Outline=2.5,Shadow=1,Alignment=2,MarginV=150"
 
-    # Layout Vertical: Fundo 1080x1920 com Blur + Vídeo proporcional centralizado + Legenda
     filtro_complexo = (
         f"[0:v]split=2[bg_in][fg_in];"
-        f"[bg_in]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];"
+        f"[bg_in]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:6[bg];"
         f"[fg_in]scale=1080:608:force_original_aspect_ratio=decrease[fg];"
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
         f"[base]subtitles='{srt_escapado}':force_style='{estilo}'[v]"
@@ -137,35 +127,27 @@ def renderizar_corte_vertical(video_orig, start_tc, end_tc, srt_corte, video_sai
 
 def processar_cortes(dir_saida):
     pasta_cortes = os.path.join(dir_saida, "Cortes_9x16")
-    if not os.path.exists(pasta_cortes):
-        os.makedirs(pasta_cortes, exist_ok=True)
+    os.makedirs(pasta_cortes, exist_ok=True)
 
-    # 1. Encontrar o vídeo preferencial (DINAMICO ou o primeiro original disponível)
     video_alvo = None
     for arq in os.listdir(dir_saida):
         if arq.endswith("_DINAMICO.mp4"):
             video_alvo = os.path.join(dir_saida, arq)
             break
-
     if not video_alvo:
         for arq in os.listdir(dir_saida):
             if arq.endswith(".mp4") and not arq.endswith("_LEGENDADO.mp4"):
                 video_alvo = os.path.join(dir_saida, arq)
                 break
-
     if not video_alvo:
-        print("    [AVISO] Nenhum video encontrado para gerar cortes.")
         return
 
-    # 2. Localizar a legenda correspondente
     pasta_legendas = os.path.join(dir_saida, "1_Legendas")
     if not os.path.exists(pasta_legendas):
-        print("    [AVISO] Pasta de legendas nao encontrada.")
         return
 
     srts = [os.path.join(pasta_legendas, f) for f in os.listdir(pasta_legendas) if f.endswith(".srt")]
     if not srts:
-        print("    [AVISO] Nenhuma legenda encontrada.")
         return
 
     srt_principal = srts[0]
@@ -173,18 +155,10 @@ def processar_cortes(dir_saida):
     if not blocos:
         return
 
-    print("    [IA] Llama analisando transcricao para encontrar os 3 melhores momentos...")
+    print("    [IA] Llama selecionando os melhores momentos...")
     melhores = identificar_melhores_momentos(blocos)
-
     if not melhores:
-        # Fallback caso a aula seja curta ou a resposta falhe: pega os primeiros 35 segundos
-        melhores = [{
-            "titulo": "Momento_Principal",
-            "inicio": blocos[0]["in"],
-            "fim": blocos[min(len(blocos)-1, 15)]["out"]
-        }]
-
-    print(f"    [OK] {len(melhores)} corte(s) de alto engajamento mapeados!")
+        melhores = [{"titulo": "Corte_Principal", "inicio": blocos[0]["in"], "fim": blocos[min(len(blocos)-1, 15)]["out"]}]
 
     for i, corte in enumerate(melhores, start=1):
         t_ini = corte.get("inicio", "00:00:00.000")
@@ -195,7 +169,6 @@ def processar_cortes(dir_saida):
         caminho_final_corte = os.path.join(pasta_cortes, nome_corte)
         caminho_srt_temp = os.path.join(pasta_cortes, f"temp_{i}.srt")
 
-        print(f"    [RENDER 9:16] Gerando Clipes #{i}: {titulo_limpo} ({t_ini} -> {t_fim})...")
         s_in = timecode_para_segundos(t_ini)
         s_out = timecode_para_segundos(t_fim)
         
@@ -205,7 +178,7 @@ def processar_cortes(dir_saida):
         if os.path.exists(caminho_srt_temp):
             os.remove(caminho_srt_temp)
 
-    print(f"    [SUCESSO] Cortes verticais salvos em: {pasta_cortes}")
+    print(f"    [SUCESSO] Cortes virais 9:16 gerados em: {pasta_cortes}")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
