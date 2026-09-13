@@ -3,6 +3,8 @@ function Mostrar-Menu {
     Write-Host "===============================================" -ForegroundColor Cyan
     Write-Host "               LUIS MEDIA TOOLS                " -ForegroundColor Cyan
     Write-Host "===============================================" -ForegroundColor Cyan
+    Write-Host "  [A] PIPELINE COMPLETO (1 CLIQUE - TUDO-EM-UM)" -ForegroundColor Green
+    Write-Host "-----------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundColor White
     Write-Host "  2. Gerar/Regenerar Legendas a partir de JSON" -ForegroundColor White
     Write-Host "  3. Transcrever Arquivo Unico" -ForegroundColor White
@@ -11,7 +13,7 @@ function Mostrar-Menu {
     Write-Host "  6. Normalizar Volume para YouTube/Cursos (-14 LUFS)" -ForegroundColor White
     Write-Host "  7. Organizar Saida em Subpastas Categorizadas" -ForegroundColor White
     Write-Host "  8. Gerar Entregaveis Finais (Relatorio, ASS, Apostila, ZIP)" -ForegroundColor White
-    Write-Host "  9. Queimar Legenda no Video MP4 (Hardsub / Pronto p/ Postar)" -ForegroundColor Yellow
+    Write-Host "  9. Queimar Legenda no Video MP4 (Hardsub)" -ForegroundColor White
     Write-Host "  10. Ajuda: O que cada opcao faz?" -ForegroundColor Cyan
     Write-Host "  0. Sair" -ForegroundColor DarkGray
     Write-Host "===============================================" -ForegroundColor Cyan
@@ -24,6 +26,7 @@ function Mostrar-Ajuda {
     Write-Host "             GUIA DE FERRAMENTAS - LUIS MEDIA TOOLS         " -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "[A] Pipeline Completo: Roda da transcricao ao ZIP final automaticamente." -ForegroundColor Green
     Write-Host "[1] Processar Aulas: Transcreve e legenda arquivos da pasta entrada." -ForegroundColor Yellow
     Write-Host "[2] Regenerar Legendas: Recalcula quebras de texto pelo .json." -ForegroundColor Yellow
     Write-Host "[3] Transcrever Unico: Transcreve apenas 1 arquivo pontual." -ForegroundColor Yellow
@@ -40,28 +43,29 @@ function Mostrar-Ajuda {
 
 do {
     Mostrar-Menu
-    $opcao = Read-Host "Escolha uma opcao [0-10]"
+    $opcao = Read-Host "Escolha uma opcao [A, 0-10]"
 
-    switch ($opcao) {
-        "1" { .\processar-aula.ps1; Pause }
-        "2" {
+    switch -Regex ($opcao) {
+        "^[aA]$" { .\pipeline-completo.ps1; Pause }
+        "^1$"    { .\processar-aula.ps1; Pause }
+        "^2$"    {
             $json = Read-Host "Digite o caminho do arquivo .json"
             if (Test-Path $json) { .\gerar-legendas.ps1 -Json $json } else { Write-Host "Nao encontrado!" -ForegroundColor Red }
             Pause
         }
-        "3" {
+        "^3$"    {
             $arq = Read-Host "Digite o caminho do arquivo"
             if (Test-Path $arq) { .\transcrever.ps1 -Arquivo $arq } else { Write-Host "Nao encontrado!" -ForegroundColor Red }
             Pause
         }
-        "4" { .\remover-silencio.ps1; Pause }
-        "5" { .\juntar-audios.ps1; Pause }
-        "6" { .\normalizar-audio.ps1; Pause }
-        "7" { .\organizar-saida.ps1; Pause }
-        "8" { .\gerar-entregaveis.ps1; Pause }
-        "9" { .\queimar-legenda.ps1; Pause }
-        "10" { Mostrar-Ajuda }
-        "0" { Write-Host "Saindo..." -ForegroundColor DarkGray; break }
-        Default { Write-Host "Opcao invalida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
+        "^4$"    { .\remover-silencio.ps1; Pause }
+        "^5$"    { .\juntar-audios.ps1; Pause }
+        "^6$"    { .\normalizar-audio.ps1; Pause }
+        "^7$"    { .\organizar-saida.ps1; Pause }
+        "^8$"    { .\gerar-entregaveis.ps1; Pause }
+        "^9$"    { .\queimar-legenda.ps1; Pause }
+        "^10$"   { Mostrar-Ajuda }
+        "^0$"    { Write-Host "Saindo..." -ForegroundColor DarkGray; break }
+        Default  { Write-Host "Opcao invalida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }
 } while ($opcao -ne "0")
