@@ -1,82 +1,80 @@
+param(
+    [Parameter(Mandatory=$false)]
+    [string]$PastaAulaAlvo
+)
+
 $ErrorActionPreference = "Stop"
 $PastaScript = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PastaEntrada = Join-Path $PastaScript "entrada"
 $PastaSaida = Join-Path $PastaScript "saida"
 
-if (-not (Test-Path $PastaSaida)) {
-    New-Item -ItemType Directory -Path $PastaSaida -Force | Out-Null
+function Unificar-AudiosPasta {
+    param([string]$CaminhoPasta)
+
+    $NomePasta = [System.IO.Path]::GetFileName($CaminhoPasta)
+    Write-Host "Verificando audios em: $NomePasta" -ForegroundColor Cyan
+
+    # Procura audios .wav e .mp3 gerados na pasta
+    $audios = Get-ChildItem -Path $CaminhoPasta -Recurse -File | Where-Object {
+        $_.Extension.ToLower() -in @(".wav", ".mp3") -and $_.Name -notmatch "aula-completa"
+    } | Sort-Object Name
+
+    if ($audios.Count -le 1) {
+        Write-Host "Poucos audios encontrados ($($audios.Count)). Nada para unificar em $NomePasta." -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host "Encontrados $($audios.Count) arquivos para unificacao." -ForegroundColor Yellow
+
+    # Cria arquivo de lista temporario para o FFmpeg
+    $txtLista = Join-Path $CaminhoPasta "lista_ffmpeg_concat.txt"
+    $linhas = $audios | ForEach-Object { "file '" + $_.FullName.Replace('\', '/') + "'" }
+    [System.IO.File]::WriteAllLines($txtLista, $linhas, [System.Text.UTF8Encoding]::new($false))
+
+    $SaidaWav = Join-Path $CaminhoPasta "aula-completa.wav"
+    $SaidaMp3 = Join-Path $CaminhoPasta "aula-completa.mp3"
+
+    Write-Host "Gerando Master WAV..." -ForegroundColor Cyan
+    & ffmpeg -y -f concat -safe 0 -i "$txtLista" -c copy "$SaidaWav" -loglevel error
+
+    Write-Host "Gerando versao de estudo MP3..." -ForegroundColor Cyan
+    & ffmpeg -y -i "$SaidaWav" -vn -b:a 192k "$SaidaMp3" -loglevel error
+
+    if (Test-Path $txtLista) {
+        Remove-Item -Path $txtLista -Force
+    }
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Unificacao concluida com sucesso!" -ForegroundColor Green
+        Write-Host "Arquivo Master WAV: $SaidaWav" -ForegroundColor DarkGray
+        Write-Host "Arquivo MP3: $SaidaMp3" -ForegroundColor DarkGray
+    } else {
+        Write-Host "ERRO ao unificar audios via FFmpeg." -ForegroundColor Red
+    }
 }
 
-$exts = @(".mp4", ".mkv", ".mov", ".avi", ".webm", ".wav", ".mp3")
-$arquivos = Get-ChildItem -Path $PastaEntrada -File | Where-Object { $exts -contains $_.Extension.ToLower() }
+Clear-Host
+Write-Host "=========================================================" -ForegroundColor Cyan
+Write-Host "        UNIFICADOR DE AUDIOS DA AULA (MASTER)            " -ForegroundColor Cyan
+Write-Host "=========================================================" -ForegroundColor Cyan
+Write-Host ""
 
-if ($null -eq $arquivos -or $arquivos.Count -eq 0) {
-    Write-Host "Nenhum arquivo de video ou audio encontrado na pasta: $PastaEntrada" -ForegroundColor Yellow
+if (-not [string]::IsNullOrWhiteSpace($PastaAulaAlvo) -and (Test-Path $PastaAulaAlvo)) {
+    Unificar-AudiosPasta -CaminhoPasta $PastaAulaAlvo
     exit 0
 }
 
-# Ordenacao natural (garante que Aula1-2 venha antes de Aula1-10)
-$arquivosOrdenados = $arquivos | Sort-Object { [regex]::Replace($_.Name, '\d+', { $args[0].Value.PadLeft(6, '0') }) }
-
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host "       JUNÇÃO DE ÁUDIOS — LUIS MEDIA TOOLS     " -ForegroundColor Cyan
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host "Arquivos identificados na ordem:" -ForegroundColor DarkGray
-foreach ($arq in $arquivosOrdenados) {
-    Write-Host "  -> $($arq.Name)" -ForegroundColor White
-}
-Write-Host "-----------------------------------------------" -ForegroundColor Cyan
-
-# 1. Gera audio intermediario padronizado (16kHz PCM WAV) para cada video
-$tempDir = Join-Path $PastaSaida "_temp_concat"
-if (Test-Path $tempDir) { Remove-Item -Path $tempDir -Recurse -Force }
-New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-
-$concatListPath = Join-Path $tempDir "lista.txt"
-$linhasLista = @()
-
-$index = 1
-$total = $arquivosOrdenados.Count
-
-foreach ($item in $arquivosOrdenados) {
-    $pct = [int]((($index - 1) / $total) * 100)
-    Write-Progress -Activity "Extraindo áudios para junção" -Status "Processando [$index/$total]: $($item.Name)" -PercentComplete $pct
-
-    $tempWav = Join-Path $tempDir ("parte_{0:D4}.wav" -f $index)
-    & ffmpeg -y -i $item.FullName -vn -acodec pcm_s16le -ar 48000 -ac 2 "$tempWav" -loglevel error
-
-    # Caminho com barras normais para a lista do FFmpeg concat
-    $caminhoFormatado = $tempWav.Replace('\', '/')
-    $linhasLista += "file '$caminhoFormatado'"
-    $index++
+# Se nao passou parametro, varre a pasta saida
+$pastas = Get-ChildItem -Path $PastaSaida -Directory | Where-Object {
+    $_.Name -notmatch "1_Legendas|2_Audio_Bruto|3_Audio_Tratado|4_Audio_Unificado|5_Dados_Whisper|6_Documentos"
 }
 
-[System.IO.File]::WriteAllLines($concatListPath, [string[]]$linhasLista, [System.Text.UTF8Encoding]::new($false))
-
-Write-Progress -Activity "Juntando áudios contínuos" -Status "Concatenando em arquivo único..." -PercentComplete 90
-
-$SaidaWav = Join-Path $PastaSaida "aula-completa.wav"
-$SaidaMp3 = Join-Path $PastaSaida "aula-completa.mp3"
-
-Write-Host "Unificando faixas em um arquivo mestre..." -ForegroundColor Yellow
-
-# Concatena em PCM WAV de alta qualidade (ideal para Premiere/DaVinci)
-& ffmpeg -y -f concat -safe 0 -i "$concatListPath" -c copy "$SaidaWav" -loglevel error
-
-# Gera tambem versao comprimida MP3 para audicao rapida
-& ffmpeg -y -i "$SaidaWav" -c:a libmp3lame -q:a 2 "$SaidaMp3" -loglevel error
-
-# Limpeza de temporarios
-Remove-Item -Path $tempDir -Recurse -Force
-Write-Progress -Activity "Extraindo áudios para junção" -Completed
+if ($pastas.Count -eq 0) {
+    Unificar-AudiosPasta -CaminhoPasta $PastaSaida
+} else {
+    foreach ($p in $pastas) {
+        Unificar-AudiosPasta -CaminhoPasta $p.FullName
+    }
+}
 
 Write-Host ""
-Write-Host "===============================================" -ForegroundColor Green
-Write-Host "        ÁUDIO UNIFICADO COM SUCESSO!           " -ForegroundColor Green
-Write-Host "===============================================" -ForegroundColor Green
-Write-Host "Arquivo Master WAV (Edição) : $SaidaWav" -ForegroundColor Cyan
-Write-Host "Arquivo Compacto MP3 (Estudo): $SaidaMp3" -ForegroundColor Cyan
-Write-Host ""
-[System.Console]::Beep(1000, 200)
-[System.Console]::Beep(1200, 300)
+Write-Host "Processo de unificacao finalizado." -ForegroundColor Green
