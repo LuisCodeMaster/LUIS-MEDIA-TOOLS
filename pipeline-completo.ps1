@@ -6,7 +6,7 @@
 
 $raiz = "C:\Users\ferna\Desktop\LUIS-MEDIA-TOOLS"
 
-# 1. Identificar origem e nome do projeto
+# 1. Identificar origem e projeto
 if ($CaminhoPasta -ne "") {
     $itemAlvo = Get-Item -LiteralPath $CaminhoPasta
     if ($itemAlvo.PSIsContainer) {
@@ -23,17 +23,17 @@ if ($CaminhoPasta -ne "") {
 }
 
 if (-not (Test-Path $dirEntrada)) {
-    Write-Error "[ERRO] Pasta de entrada nao encontrada: $dirEntrada"
+    Write-Error "[ERRO] Pasta nao encontrada: $dirEntrada"
     exit 1
 }
 
-# 2. Janela Grafica para Selecionar Destino Definitivo
+# 2. Janela Grafica de Destino
 $saidaPadrao = Join-Path $raiz "saida\$nomeAula"
 
 if ($PastaDestino -eq "") {
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = "Selecione a pasta de destino final para consolidar o projeto [$nomeAula]:"
+    $dialog.Description = "Selecione o destino final para [$nomeAula]:"
     $dialog.SelectedPath = (Join-Path $raiz "saida")
     $dialog.ShowNewFolderButton = $true
 
@@ -57,7 +57,7 @@ if (-not (Test-Path $dirSaida)) {
     New-Item -ItemType Directory -Path $dirSaida -Force | Out-Null
 }
 
-# 3. Estrutura temporaria de entregaveis (pastas 1 a 7)
+# 3. Estrutura de entregaveis tecnicos (pastas 1 a 7)
 $pastas = @{
     "1" = Join-Path $dirSaida "1_Legendas"
     "2" = Join-Path $dirSaida "2_Audio_Bruto"
@@ -72,19 +72,19 @@ foreach ($p in $pastas.Values) {
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
 
-# 4. Varredura de vídeos (ignora os videos ja fatiados _sem_silencio)
-$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "_sem_silencio" } | Sort-Object Name
+# 4. Busca de videos brutos (ignora arquivos ja tratados ou legendados)
+$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
 
 if ($videos.Count -eq 0) {
-    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "_sem_silencio" } | Sort-Object Name
+    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
     if ($videos.Count -eq 0) {
-        Write-Host "[AVISO] Nenhum video compativel encontrado em $dirEntrada ou $dirSaida" -ForegroundColor Yellow
+        Write-Host "[AVISO] Nenhum video bruto compativel encontrado." -ForegroundColor Yellow
         exit 0
     }
 }
 
 Write-Host "`n=========================================================" -ForegroundColor Cyan
-Write-Host "   LUIS-MEDIA-TOOLS: PIPELINE MASTER AUTOCUT + LLAMA     " -ForegroundColor Cyan
+Write-Host "   LUIS-MEDIA-TOOLS: PIPELINE ULTRA MASTER              " -ForegroundColor Cyan
 Write-Host "   Projeto: $nomeAula                                    " -ForegroundColor Cyan
 Write-Host "   Origem:  $dirEntrada                                  " -ForegroundColor Cyan
 Write-Host "   Destino: $dirSaida                                    " -ForegroundColor Cyan
@@ -93,7 +93,7 @@ Write-Host "=========================================================" -Foregrou
 
 $ErrorActionPreference = "Continue"
 
-# 5. Minutagem acumulada para YouTube/Vimeo
+# 5. Processamento por video
 $minutagemArquivo = Join-Path $pastas["6"] "capitulos-youtube.txt"
 $tempoAcumulado = 0.0
 $listaCapitulos = @()
@@ -103,8 +103,22 @@ foreach ($video in $videos) {
     $dirTempChunk = Join-Path $dirSaida $nome
     if (-not (Test-Path $dirTempChunk)) { New-Item -ItemType Directory -Path $dirTempChunk -Force | Out-Null }
 
-    # Calculo de duracao via ffprobe
-    $duracaoStr = (& ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $video.FullName)
+    Write-Host "`n>>> [PROCESSANDO] $nome ..." -ForegroundColor Green
+
+    # A. Auto-Cut com transicao suave (Gera _DINAMICO.mp4 e timeline .EDL)
+    $videoDinamico = Join-Path $dirSaida "${nome}_DINAMICO.mp4"
+    if (-not (Test-Path $videoDinamico)) {
+        Write-Host "    Cortando pausas e momentos mortos (Anti-Estalo)..." -ForegroundColor DarkYellow
+        & python (Join-Path $raiz "autocut_engine.py") $video.FullName $dirSaida
+        # Move o arquivo EDL para a pasta 7
+        Get-ChildItem -Path $dirSaida -Filter "${nome}_timeline_cortes.edl" | Move-Item -Destination $pastas["7"] -Force
+    }
+
+    # O video alvo para minutagem, audio e transcricao passa a ser o DINAMICO (ritmo perfeito)
+    $videoAlvo = if (Test-Path $videoDinamico) { $videoDinamico } else { $video.FullName }
+
+    # B. Minutagem acumulada exata
+    $duracaoStr = (& ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $videoAlvo)
     $duracao = 0.0
     [double]::TryParse($duracaoStr, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$duracao) | Out-Null
 
@@ -115,35 +129,23 @@ foreach ($video in $videos) {
     $listaCapitulos += "$stamp - $nome"
     $tempoAcumulado += $duracao
 
-    $legendaFinal    = Join-Path $pastas["1"] "$nome.srt"
-    $audioBrutoFinal = Join-Path $pastas["2"] "$nome.wav"
-    $audioTratFinal  = Join-Path $pastas["3"] "$nome.wav"
-
-    # Trava de Cache
-    if ((Test-Path $legendaFinal) -and (Test-Path $audioBrutoFinal) -and (Test-Path $audioTratFinal)) {
-        Write-Host "[CACHE HIT] $nome ja processado. Pulando..." -ForegroundColor DarkGray
-        continue
-    }
-
-    Write-Host "`n>>> [PROCESSANDO] $nome ..." -ForegroundColor Green
-
-    # 1. Extração de Audio Bruto (16kHz mono)
+    # C. Audio Bruto do video dinamico (16kHz mono)
     $audioBrutoTemp = Join-Path $dirTempChunk "$nome.wav"
     if (-not (Test-Path $audioBrutoTemp)) {
-        & ffmpeg -hide_banner -loglevel error -y -i $video.FullName -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
+        & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
     }
 
-    # 2. Tratamento Broadcast EBU R128 + Highpass 80Hz
+    # D. Tratamento Broadcast EBU R128 + Highpass 80Hz
     $audioTratTemp = Join-Path $dirTempChunk "$($nome)_tratado.wav"
     if (-not (Test-Path $audioTratTemp)) {
         Write-Host "    Tratando audio (Filtros EBU R128 + Limpeza)..." -ForegroundColor DarkCyan
         & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af "highpass=f=80,loudnorm=I=-16:LRA=11:TP=-1.5" $audioTratTemp
     }
 
-    # 3. Transcricao via faster-whisper (Ryzen CPU / int8)
+    # E. Transcricao via faster-whisper direto do ritmo sem silêncio
     $srtTemp = Join-Path $dirTempChunk "$nome.srt"
     if (-not (Test-Path $srtTemp)) {
-        Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
+        Write-Host "    Transcrevendo fala continua com Whisper..." -ForegroundColor Yellow
         $scriptTranscricao = @"
 import os, sys
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
@@ -165,13 +167,19 @@ except Exception:
         python -c $scriptTranscricao
     }
 
-    # 4. Auto-Cut de Silêncio e Timeline EDL
-    if (Test-Path (Join-Path $raiz "autocut_engine.py")) {
-        Write-Host "    Detectando silencios e gerando EDL..." -ForegroundColor DarkYellow
-        & python (Join-Path $raiz "autocut_engine.py") $video.FullName $pastas["7"]
+    # F. Versão com Legenda Embutida (Hardsub Profissional)
+    $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
+    if ((Test-Path $srtTemp) -and (-not (Test-Path $videoLegendado))) {
+        Write-Host "    Renderizando versao dinamica com hardsub..." -ForegroundColor Magenta
+        # Converte caminho do SRT para formato compativel com o filtro do FFmpeg
+        $srtFormatado = $srtTemp.Replace("\", "/").Replace(":", "\:")
+        $estiloLegenda = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,MarginV=25"
+        & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
+            -vf "subtitles='$srtFormatado':force_style='$estiloLegenda'" `
+            -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
     }
 
-    # Copia para as pastas consolidadas
+    # Copia itens consolidados
     if (Test-Path $srtTemp) { Copy-Item -Path (Join-Path $dirTempChunk "$nome.*") -Destination $pastas["1"] -Force }
     if (Test-Path $audioBrutoTemp) { Copy-Item -Path $audioBrutoTemp -Destination $pastas["2"] -Force }
     if (Test-Path $audioTratTemp) { Copy-Item -Path $audioTratTemp -Destination $pastas["3"] -Force }
@@ -179,16 +187,15 @@ except Exception:
 
 # Salva minutagem
 $listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
-Write-Host "[OK] Minutagem gerada em: $minutagemArquivo" -ForegroundColor Cyan
+Write-Host "`n[OK] Minutagem dinamica gerada em: $minutagemArquivo" -ForegroundColor Cyan
 
 # 6. Slides Inteligentes (Scene Detection)
 $slidesCount = (Get-ChildItem -Path $pastas["4"] -Include "*.jpg","*.png" -Recurse -ErrorAction SilentlyContinue).Count
 if ($slidesCount -eq 0) {
-    Write-Host "`n>>> [SLIDES] Detectando trocas reais de slides com FFmpeg..." -ForegroundColor Cyan
+    Write-Host "`n>>> [SLIDES] Detectando trocas reais de slides..." -ForegroundColor Cyan
     foreach ($video in $videos) {
         $prefixo = $video.BaseName
         $padraoSaida = Join-Path $pastas["4"] "${prefixo}_slide_%03d.jpg"
-        
         & ffmpeg -hide_banner -loglevel error -y -i $video.FullName `
             -vf "select='gt(scene,0.25)',mpdecimate" `
             -vsync vfr -q:v 2 $padraoSaida
@@ -203,7 +210,7 @@ if ($slidesCount -eq 0) {
     }
 }
 
-# 7. Motor Editorial e PDF da Apostila
+# 7. Motor Editorial e PDF
 if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     Write-Host "`n>>> [EDITORIAL] Gerando apostila didatica..." -ForegroundColor Cyan
     & python (Join-Path $raiz "editorial_engine.py") $dirSaida
@@ -224,7 +231,7 @@ if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     }
 }
 
-# 8. Chamada da IA Local Llama (Resumo Executivo e Quiz de Fixação)
+# 8. Chamada Llama Local (Resumo Executivo e Quiz)
 if (Test-Path (Join-Path $raiz "gerador_ia.py")) {
     Write-Host "`n>>> [IA LOCAL - LLAMA] Criando Resumo Executivo e Quiz..." -ForegroundColor Magenta
     & python (Join-Path $raiz "gerador_ia.py") $dirSaida
@@ -233,47 +240,44 @@ if (Test-Path (Join-Path $raiz "gerador_ia.py")) {
 # 9. Limpeza de subpastas temporarias
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-# 10. Empacotamento dos entregaveis (pastas 1 a 7)
+# 10. Empacotamento dos entregaveis técnicos (pastas 1 a 7)
 Write-Host "`n>>> [EMPACOTAMENTO] Gerando entregavel ZIP..." -ForegroundColor Cyan
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
 Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"], $pastas["7"] -DestinationPath $arquivoZip -Force
 
-# 11. Faxina de intermediarios (SSD protegido)
+# 11. Limpeza de pastas tecnicas soltas
 if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
-    Write-Host ">>> [LIMPEZA] Removendo pastas soltas intermediarias..." -ForegroundColor DarkGray
+    Write-Host ">>> [LIMPEZA] Protegendo espaco no SSD (pastas intermediarias limpas)..." -ForegroundColor DarkGray
     foreach ($p in $pastas.Values) {
         if (Test-Path $p) { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 
-# 12. Mover videos brutos e fatiados para a raiz do destino
-Write-Host "`n>>> [CONSOLIDACAO] Movendo videos para o destino final..." -ForegroundColor Cyan
+# 12. Mover videos brutos para a raiz do destino
 foreach ($video in $videos) {
     if ($video.DirectoryName -ne $dirSaida) {
         $destinoFinalVideo = Join-Path $dirSaida $video.Name
         Move-Item -LiteralPath $video.FullName -Destination $destinoFinalVideo -Force
-        Write-Host "    Movido bruto: $($video.Name)" -ForegroundColor Gray
     }
 }
 
-# 13. Faxina da pasta de origem (se ficou vazia)
+# 13. Limpar pasta de origem vazia
 if ((Test-Path $dirEntrada) -and ($dirEntrada -ne $dirSaida) -and ($dirEntrada -ne $raiz)) {
     $itensRestantes = Get-ChildItem -Path $dirEntrada -Force
     if ($itensRestantes.Count -eq 0) {
-        Write-Host ">>> [LIMPEZA ORIGEM] Pasta de origem vazia removida: $dirEntrada" -ForegroundColor DarkGray
         Remove-Item -LiteralPath $dirEntrada -Force -ErrorAction SilentlyContinue
     }
 }
 
-# 14. Notificacao Sonora e Alerta Visual
+# 14. Alerta Sonoro e Visual
 [System.Console]::Beep(1000, 300)
 [System.Console]::Beep(1500, 400)
 try {
     Add-Type -AssemblyName System.Windows.Forms
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
-    $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Completo!"
-    $notify.BalloonTipText = "Videos, Auto-Cut EDL, Resumo e Quiz gerados em [$nomeAula]."
+    $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Concluido!"
+    $notify.BalloonTipText = "Videos dinamicos, cortes e documentos gerados com sucesso."
     $notify.Visible = $true
     $notify.ShowBalloonTip(4000)
 } catch {}
@@ -283,6 +287,6 @@ explorer.exe $dirSaida
 
 Write-Host "`n=========================================================" -ForegroundColor Green
 Write-Host "   PIPELINE FINALIZADO COM SUCESSO!                     " -ForegroundColor Green
-Write-Host "   Local Final: $dirSaida                               " -ForegroundColor Green
-Write-Host "   Entregavel:  $arquivoZip                             " -ForegroundColor Green
+Write-Host "   Local:      $dirSaida                                " -ForegroundColor Green
+Write-Host "   Entregavel: $arquivoZip                              " -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
