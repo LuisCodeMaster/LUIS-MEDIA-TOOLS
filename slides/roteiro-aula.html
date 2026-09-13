@@ -3,237 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LUIS MEDIA TOOLS â€” ApresentaÃ§Ã£o da Aula</title>
+<title>Apresentação - LUIS MEDIA TOOLS</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #0d1117;
-    color: #e6edf3;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    overflow: hidden;
-    user-select: none;
-  }
-  .progress-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 5px;
-    background: rgba(255,255,255,0.05);
-    z-index: 100;
-  }
-  .progress-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #58a6ff, #2ea043);
-    transition: width 0.3s ease;
-  }
-  .slide-deck {
-    width: 92vw;
-    max-width: 1440px;
-    height: 86vh;
-    position: relative;
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
-    display: flex;
-  }
-  .slide {
-    display: none;
-    width: 100%;
-    height: 100%;
-    padding: 70px 90px;
-    flex-direction: column;
-    justify-content: center;
-    position: relative;
-  }
-  .slide.active { 
-    display: flex; 
-    animation: slideFade 0.28s cubic-bezier(0.16, 1, 0.3, 1); 
-  }
-  @keyframes slideFade {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  h1 { font-size: 3.2rem; color: #58a6ff; margin-bottom: 24px; line-height: 1.2; font-weight: 700; letter-spacing: -0.5px; }
-  h2 { font-size: 2.2rem; color: #7ee787; margin-bottom: 18px; }
-  h3 { font-size: 1.6rem; color: #8b949e; margin-bottom: 24px; font-weight: 400; }
-  p, li { font-size: 1.85rem; line-height: 1.65; color: #c9d1d9; margin-bottom: 14px; }
-  ul, ol { margin-left: 48px; margin-bottom: 24px; }
-  li { margin-bottom: 14px; }
-  strong { color: #f0883e; font-weight: 600; }
-  blockquote {
-    border-left: 6px solid #58a6ff;
-    background: rgba(88, 166, 255, 0.06);
-    padding: 16px 24px;
-    border-radius: 0 8px 8px 0;
-    margin: 24px 0;
-    font-style: italic;
-    color: #a5d6ff;
-    font-size: 1.85rem;
-  }
-  .callout {
-    padding: 16px 22px;
-    border-radius: 8px;
-    margin: 20px 0;
-    font-size: 1.6rem;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .callout.tip {
-    background: rgba(46, 160, 67, 0.12);
-    border: 1px solid rgba(46, 160, 67, 0.3);
-    color: #7ee787;
-  }
-  .callout.warn {
-    background: rgba(210, 153, 34, 0.12);
-    border: 1px solid rgba(210, 153, 34, 0.3);
-    color: #e3b341;
-  }
-  .callout .tag {
-    font-size: 0.9rem;
-    font-weight: 800;
-    padding: 4px 10px;
-    border-radius: 6px;
-    text-transform: uppercase;
-    background: rgba(255,255,255,0.1);
-  }
-  .slide-num {
-    position: absolute;
-    bottom: 28px;
-    right: 36px;
-    font-size: 1.15rem;
-    color: #484f58;
-    font-weight: 600;
-  }
-  .top-hud {
-    position: fixed;
-    top: 14px;
-    right: 24px;
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    font-size: 0.95rem;
-    color: #8b949e;
-    z-index: 101;
-    font-family: monospace;
-  }
-  .hud-badge {
-    background: #161b22;
-    border: 1px solid #30363d;
-    padding: 4px 12px;
-    border-radius: 20px;
-  }
-  .hint {
-    position: fixed;
-    bottom: 12px;
-    color: #484f58;
-    font-size: 0.9rem;
-    letter-spacing: 0.5px;
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; overflow: hidden; }
+  .deck { width: 100vw; height: 100vh; position: relative; }
+  .slide { display: none; width: 100%; height: 100%; padding: 60px 80px; position: absolute; inset: 0; }
+  .slide.active { display: flex; flex-direction: column; justify-content: center; }
+  .slide-content { max-width: 1200px; margin: 0 auto; width: 100%; }
+  h1 { font-size: 3rem; margin-bottom: 20px; color: #38bdf8; }
+  h2 { font-size: 2.2rem; margin-bottom: 20px; color: #f1f5f9; }
+  h3 { font-size: 1.5rem; margin-bottom: 15px; color: #94a3b8; }
+  p { font-size: 1.3rem; line-height: 1.6; margin-bottom: 15px; color: #cbd5e1; }
+  ul { margin-left: 30px; font-size: 1.3rem; line-height: 1.6; margin-bottom: 15px; color: #cbd5e1; }
+  li { margin-bottom: 8px; }
+  .row { display: flex; gap: 40px; margin-top: 20px; }
+  .col { flex: 1; }
+  .callout { padding: 15px 20px; border-radius: 8px; margin: 20px 0; }
+  .callout.tip { background: rgba(56, 189, 248, 0.1); border-left: 4px solid #38bdf8; }
+  .callout.warning { background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; }
+  .callout-title { font-weight: bold; margin-bottom: 5px; }
+  .speaker-notes { display: none; background: #1e293b; padding: 15px; border-radius: 6px; border-left: 4px solid #a855f7; margin-top: 20px; color: #e2e8f0; font-size: 1rem; }
+  body.show-notes .speaker-notes { display: block; }
+  pre { background: #020617; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 15px 0; border: 1px solid #334155; }
+  code { font-family: Consolas, monospace; color: #38bdf8; }
+  .progress-bar { position: fixed; top: 0; left: 0; height: 5px; background: #38bdf8; transition: width 0.3s ease; }
+  .slide-number { position: absolute; bottom: 20px; right: 40px; font-size: 0.9rem; color: #64748b; }
+  .timer { position: absolute; bottom: 20px; left: 40px; font-size: 0.9rem; color: #64748b; font-family: monospace; }
+  .deck.overview { display: flex; flex-wrap: wrap; overflow-y: auto; gap: 20px; padding: 40px; }
+  .deck.overview .slide { display: block !important; position: relative !important; width: calc(33.333% - 20px) !important; height: 240px !important; border: 2px solid #334155; border-radius: 8px; transform: scale(0.95); cursor: pointer; }
   @media print {
-    body { background: #ffffff !important; color: #111111 !important; height: auto !important; overflow: visible !important; }
-    .progress-container, .top-hud, .hint { display: none !important; }
-    .slide-deck { width: 100% !important; max-width: none !important; height: auto !important; border: none !important; box-shadow: none !important; background: transparent !important; display: block !important; }
-    .slide { display: block !important; page-break-after: always; height: 100vh; padding: 40px; background: #ffffff !important; color: #111111 !important; border: none !important; }
-    h1 { color: #0969da !important; }
-    h2 { color: #1a7f37 !important; }
-    h3, p, li { color: #24292f !important; }
-    strong { color: #bc4c00 !important; }
-    blockquote { border-left-color: #0969da !important; background: #f6f8fa !important; color: #24292f !important; }
-    .callout.tip { background: #dafbe1 !important; border-color: #4ac26b !important; color: #1a7f37 !important; }
-    .callout.warn { background: #fff8c5 !important; border-color: #d4a72c !important; color: #9a6700 !important; }
-    .slide-num { color: #6e7781 !important; }
+    body { overflow: visible; background: #fff; color: #000; }
+    .slide { display: block !important; position: relative !important; page-break-after: always; height: 100vh; }
+    .progress-bar, .timer { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="progress-container"><div class="progress-bar" id="progressBar"></div></div>
+<div class="progress-bar" id="progress"></div>
+<div class="deck" id="deck">
+<section class="slide" id="slide-1"><div class="slide-content"><p>---</p>
+<h1><strong>Introdução ao Inglês</strong></h1>
+<p><h3><strong>Professor</strong></h3>
+[ Professor ]
+Aula: O que é Inglês?</p></div><div class="slide-number">1 / 7</div></section>
+<section class="slide" id="slide-2"><div class="slide-content"><h2><strong>O que é Inglês?</strong></h2>
+<p><h3><div class="callout warning"><div class="callout-title">⚠️ ATENÇÃO</div><p>Definição importante</p></div></h3>
+Inglês é uma língua inglesa, falada e escrita por milhões de pessoas em todo o mundo. É a segunda língua mais falada no mundo, depois do chinês.</p></div><div class="slide-number">2 / 7</div></section>
+<section class="slide" id="slide-3"><div class="slide-content"><h2><strong>Origem do Inglês</strong></h2>
+<p><h3><aside class="speaker-notes"><strong>Nota:</strong> Evolução da língua</aside></h3>
+O inglês tem origens incertas, mas é sabido que se desenvolveu a partir das línguas celtas e germânicas. Ao longo dos séculos, o inglês foi influenciado por outras línguas, como o latim e o francês.</p></div><div class="slide-number">3 / 7</div></section>
+<section class="slide" id="slide-4"><div class="slide-content"><h2><strong>Tipos de Inglês</strong></h2>
+<h3><div class="callout tip"><div class="callout-title">💡 DICA</div><p>Quais são os principais tipos?</p></div></h3>
+Existem vários tipos de inglês, incluindo:
+<ul>
+<li>  Ingles do Reino Unido (Brasil)</li>
+<li>  Américano</li>
+<li>  Australiano</li>
+<li>  Canadense</li>
+</ul></div><div class="slide-number">4 / 7</div></section>
+<section class="slide" id="slide-5"><div class="slide-content"><h2><strong>Importância do Inglês</strong></h2>
+<p><h3><div class="callout tip"><div class="callout-title">💡 DICA</div><p>Por que é essencial aprender inglês?</p></div></h3>
+O inglês é uma língua fundamental para quem quer estudar, trabalhar ou se comunicar no mundo atual. Além disso, o conhecimento de inglês pode abrir portas para novas oportunidades e melhorar a qualidade de vida.</p></div><div class="slide-number">5 / 7</div></section>
+<section class="slide" id="slide-6"><div class="slide-content"><h2><strong>Conclusão</strong></h2>
+<p><h3><aside class="speaker-notes"><strong>Nota:</strong> Recapitulação</aside></h3>
+O inglês é uma língua rica e diversa que desempenha um papel fundamental na comunicação global. Compreender suas características, tipos e importância pode ajudar a tornar-se mais eficiente e conectado no mundo moderno.</p></div><div class="slide-number">6 / 7</div></section>
+<section class="slide" id="slide-7"><div class="slide-content"><p>[ DICA ] Resumo das informações
+Inglês: língua inglesa, segunda língua mais falada no mundo.
+Origem incerta, influenciada por outras línguas ao longo dos séculos.
+Existem vários tipos de inglês, incluindo o Reino Unido, Américano e Australiano.</p></div><div class="slide-number">7 / 7</div></section>
 
-<div class="top-hud">
-  <div class="hud-badge" id="timer">00:00</div>
-  <div class="hud-badge" title="Pressione F11 para tela cheia">F11 Tela Cheia</div>
 </div>
-
-<div class="slide-deck" id="deck">
-<section class='slide active' id='slide-1'><div class='inner'><h1>Aula 01: Apresentacao Pessoal em Ingles</h1>
-<h3>Curso de Ingles Pratico</h3>
-<p><strong>Professor Luis</strong></p></div><div class='slide-num'>1 / 5</div></section>
-<section class='slide ' id='slide-2'><div class='inner'><h1>O que voce vai aprender hoje?</h1>
-<ul>
-<li>Como falar seu <strong>nome</strong> e <strong>idade</strong></li>
-<li>Como dizer de <strong>onde voce e</strong> (pais / cidade)</li>
-<li>Como falar sobre sua <strong>profissao</strong></li>
-<li>Expressar gostos e preferencias simples</li>
-</ul></div><div class='slide-num'>2 / 5</div></section>
-<section class='slide ' id='slide-3'><div class='inner'><h1>Estrutura 1: Nome e Idade</h1>
-<blockquote>Frases fundamentais para quebrar o gelo:</blockquote>
-<ul>
-<li><strong>My name is...</strong> <em>(Meu nome e...)</em></li>
-<li><strong>I am ... years old</strong> <em>(Eu tenho ... anos)</em></li>
-</ul>
-<p><em>Exemplo:</em></p>
-<ul>
-<li><em>Hello! My name is Luis and I am 24 years old.</em></li>
-</ul></div><div class='slide-num'>3 / 5</div></section>
-<section class='slide ' id='slide-4'><div class='inner'><h1>Pratique em Voz Alta</h1>
-<p>Repita pausadamente:</p>
-<ol>
-<li><strong>Hi, nice to meet you!</strong></li>
-<li><strong>Where are you from?</strong></li>
-<li><strong>I am from Brazil.</strong></li>
-</ul></div><div class='slide-num'>4 / 5</div></section>
-<section class='slide ' id='slide-5'><div class='inner'><h1>Resumo e Proximo Bloco</h1>
-<ul>
-<li>Dominamos a introducao pessoal basica.</li>
-<li>No proximo bloco: <strong>perguntas frequentes no dia a dia</strong>.</li>
-</ul></div><div class='slide-num'>5 / 5</div></section>
-</div>
-
-<div class="hint">Navegue com [Setas], [Espaco] ou clique. [R] Reiniciar Timer | [P] Imprimir/Salvar PDF</div>
-
+<div class="timer" id="timer">00:00</div>
 <script>
-  let cur = 0;
   const slides = document.querySelectorAll('.slide');
-  const bar = document.getElementById('progressBar');
-  const timerElem = document.getElementById('timer');
-
+  let current = 0;
   function update() {
-    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
-    const pct = ((cur + 1) / slides.length) * 100;
-    bar.style.width = pct + '%';
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === current));
+    document.getElementById('progress').style.width = ((current + 1) / slides.length * 100) + '%';
   }
-
-  function next() { if (cur < slides.length - 1) { cur++; update(); } }
-  function prev() { if (cur > 0) { cur--; update(); } }
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') next();
-    if (e.key === 'ArrowLeft' || e.key === 'PageUp') prev();
-    if (e.key.toLowerCase() === 'p') window.print();
-    if (e.key.toLowerCase() === 'r') { sec = 0; }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      if (current < slides.length - 1) current++;
+      update();
+    } else if (e.key === 'ArrowLeft') {
+      if (current > 0) current--;
+      update();
+    } else if (e.key.toLowerCase() === 'o') {
+      document.getElementById('deck').classList.toggle('overview');
+    } else if (e.key.toLowerCase() === 'n') {
+      document.body.classList.toggle('show-notes');
+    } else if (e.key.toLowerCase() === 'p') {
+      window.print();
+    }
   });
-
-  document.getElementById('deck').addEventListener('click', (e) => {
-    if (e.clientX > window.innerWidth / 2) next();
-    else prev();
+  slides.forEach((s, idx) => {
+    s.addEventListener('click', () => {
+      if (document.getElementById('deck').classList.contains('overview')) {
+        current = idx;
+        document.getElementById('deck').classList.remove('overview');
+        update();
+      }
+    });
   });
-
-  // Cronometro da aula
   let sec = 0;
   setInterval(() => {
     sec++;
     const m = String(Math.floor(sec / 60)).padStart(2, '0');
     const s = String(sec % 60).padStart(2, '0');
-    timerElem.textContent = m + ':' + s;
+    document.getElementById('timer').innerText = m + ':' + s;
   }, 1000);
-
   update();
 </script>
 </body>

@@ -1,41 +1,53 @@
-# Aula 01: Apresentacao Pessoal em Ingles
-### Curso de Ingles Pratico
-**Professor Luis**
+---
+
+# **Introdução ao Inglês**
+
+### **Professor**
+[ Professor ]
+Aula: O que é Inglês?
 
 ---
 
-# O que voce vai aprender hoje?
+## **O que é Inglês?**
 
-- Como falar seu **nome** e **idade**
-- Como dizer de **onde voce e** (pais / cidade)
-- Como falar sobre sua **profissao**
-- Expressar gostos e preferencias simples
+### [ATENCAO] Definição importante
+Inglês é uma língua inglesa, falada e escrita por milhões de pessoas em todo o mundo. É a segunda língua mais falada no mundo, depois do chinês.
 
 ---
 
-# Estrutura 1: Nome e Idade
+## **Origem do Inglês**
 
-> Frases fundamentais para quebrar o gelo:
-
-- **My name is...** *(Meu nome e...)*
-- **I am ... years old** *(Eu tenho ... anos)*
-
-*Exemplo:*
-- *Hello! My name is Luis and I am 24 years old.*
+### [NOTA] Evolução da língua
+O inglês tem origens incertas, mas é sabido que se desenvolveu a partir das línguas celtas e germânicas. Ao longo dos séculos, o inglês foi influenciado por outras línguas, como o latim e o francês.
 
 ---
 
-# Pratique em Voz Alta
+## **Tipos de Inglês**
 
-Repita pausadamente:
-
-1. **Hi, nice to meet you!**
-2. **Where are you from?**
-3. **I am from Brazil.**
+### [DICA] Quais são os principais tipos?
+Existem vários tipos de inglês, incluindo:
+*   Ingles do Reino Unido (Brasil)
+*   Américano
+*   Australiano
+*   Canadense
 
 ---
 
-# Resumo e Proximo Bloco
+## **Importância do Inglês**
 
-- Dominamos a introducao pessoal basica.
-- No proximo bloco: **perguntas frequentes no dia a dia**.
+### [DICA] Por que é essencial aprender inglês?
+O inglês é uma língua fundamental para quem quer estudar, trabalhar ou se comunicar no mundo atual. Além disso, o conhecimento de inglês pode abrir portas para novas oportunidades e melhorar a qualidade de vida.
+
+---
+
+## **Conclusão**
+
+### [NOTA] Recapitulação
+O inglês é uma língua rica e diversa que desempenha um papel fundamental na comunicação global. Compreender suas características, tipos e importância pode ajudar a tornar-se mais eficiente e conectado no mundo moderno.
+
+---
+
+[ DICA ] Resumo das informações
+Inglês: língua inglesa, segunda língua mais falada no mundo.
+Origem incerta, influenciada por outras línguas ao longo dos séculos.
+Existem vários tipos de inglês, incluindo o Reino Unido, Américano e Australiano.
