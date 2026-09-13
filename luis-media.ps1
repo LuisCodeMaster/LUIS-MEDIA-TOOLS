@@ -6,12 +6,13 @@ Write-Host "  1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundCo
 Write-Host "  2. Gerar/Regenerar Legendas a partir de JSON" -ForegroundColor White
 Write-Host "  3. Transcrever Arquivo Unico" -ForegroundColor White
 Write-Host "  4. Cortar Silencios de Audios/Aulas (Remover Pausas)" -ForegroundColor White
-Write-Host "  5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor Yellow
-Write-Host "  6. Sair" -ForegroundColor DarkGray
+Write-Host "  5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor White
+Write-Host "  6. Normalizar Volume para YouTube/Cursos (-14 LUFS)" -ForegroundColor Yellow
+Write-Host "  7. Sair" -ForegroundColor DarkGray
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
 
-$opcao = Read-Host "Escolha uma opcao [1-6]"
+$opcao = Read-Host "Escolha uma opcao [1-7]"
 
 switch ($opcao) {
     "1" {
@@ -40,6 +41,9 @@ switch ($opcao) {
         .\juntar-audios.ps1
     }
     "6" {
+        .\normalizar-audio.ps1
+    }
+    "7" {
         Write-Host "Saindo..." -ForegroundColor DarkGray
         exit 0
     }
