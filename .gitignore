@@ -1,0 +1,13 @@
+﻿entrada/*
+saida/*
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wav
+*.mp3
+*.aac
+*.ogg
+*.exe
+__pycache__/
+.vscode/
