@@ -107,7 +107,7 @@ $grpPreset.Controls.Add($cmbPresets)
 
 $lblPresetDesc = New-Object System.Windows.Forms.Label
 $lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(200, 32)
-$lblPresetDesc.Text = "Voz Broadcast + Legenda Profissional."
+$lblPresetDesc.Text = "Voz Broadcast + Legenda Suave Estilo Curso."
 $lblPresetDesc.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
 $lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $grpPreset.Controls.Add($lblPresetDesc)
@@ -143,7 +143,7 @@ $tabVideo.Controls.Add($chkAudioBroadcast)
 
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox
 $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 115); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
-$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Profissional"
+$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Suave"
 $chkHardsubHoriz.Checked = $cfg.Hardsub
 $tabVideo.Controls.Add($chkHardsubHoriz)
 
@@ -272,7 +272,6 @@ foreach ($video in $videos) {
     $dirTempChunk = Join-Path $dirSaida $nome
     if (-not (Test-Path $dirTempChunk)) { New-Item -ItemType Directory -Path $dirTempChunk -Force | Out-Null }
 
-    # 1. Auto-Cut Dinâmico
     $videoAlvo = $video.FullName
     if ($fazerAutoCut) {
         $videoDinamico = Join-Path $dirSaida "${nome}_DINAMICO.mp4"
@@ -285,7 +284,6 @@ foreach ($video in $videos) {
         if (Test-Path $videoDinamico) { $videoAlvo = $videoDinamico }
     }
 
-    # 2. Minutagem
     $duracaoStr = (& ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $videoAlvo)
     $duracao = 0.0
     [double]::TryParse($duracaoStr, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$duracao) | Out-Null
@@ -296,21 +294,13 @@ foreach ($video in $videos) {
     $listaCapitulos += "$stamp - $nome"
     $tempoAcumulado += $duracao
 
-    # 3. Extrair Áudio Bruto
     $audioBrutoTemp = Join-Path $dirTempChunk "$nome.wav"
     & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
 
-    # 4. TRATAMENTO DE VOZ DE ESTÚDIO (Cadeia Broadcast Pro)
-    # Filtros aplicados:
-    # - highpass=f=80: Remove zumbidos graves de ar-condicionado e microfone
-    # - equalizer=f=3000:width_type=o:w=2:g=3: Dá brilho e inteligibilidade na voz (presença)
-    # - compand: Compressor de estúdio que equaliza picos e dá corpo à fala
-    # - loudnorm: Normalização final no padrão broadcast profissional (-16 LUFS)
     $audioTratTemp = Join-Path $dirTempChunk "$($nome)_tratado.wav"
     $cadeiaFiltrosVoz = "highpass=f=80,equalizer=f=3000:width_type=o:w=2:g=3,compand=0.3|0.3:1|1:-90/-60|-60/-40|-40/-30:6:0:-90:0.1,loudnorm=I=-16:LRA=11:TP=-1.5"
     & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af $cadeiaFiltrosVoz $audioTratTemp
 
-    # 5. Whisper Transcrição
     $srtFinal = Join-Path $pastas["1"] "$nome.srt"
     Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
     $scriptTranscricao = @"
@@ -333,24 +323,22 @@ except Exception as e:
     python -c $scriptTranscricao
     Start-Sleep -Seconds 1
 
-    # 6. Hardsub com Estilo Netflix / Cursos Premium (ASS Avançado)
+    # HARD SUB COM ESTILO SUAVE (Ajustado para curso profissional)
     if ($fazerHardsub -and (Test-Path $srtFinal) -and ((Get-Item $srtFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao dinamica com Legenda Profissional (Netflix Style)..." -ForegroundColor Magenta
+            Write-Host "    Renderizando versao com Legenda Suave..." -ForegroundColor Magenta
             $srtFormatado = $srtFinal.Replace("\", "/").Replace(":", "\:")
             
-            # Estilo ASS Profissional:
-            # - Fonte Arial Black bem legível
-            # - Tamanho 20 (proporcional a 1080p)
-            # - Cor Primária Branca (&H00FFFFFF)
-            # - Contorno Preto Sólido (&H00000000) com espessura 2.5
-            # - Sombra suave (&H80000000)
-            # - Alinhamento centralizado na parte inferior com margem de 35px
-            $estiloNetflix = "FontName=Arial Black,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=1,Outline=2.5,Shadow=1,Alignment=2,MarginV=35"
+            # Estilo Suave:
+            # - Fonte Arial limpa e profissional
+            # - Tamanho 18 (proporcional, sem exagero)
+            # - Sombra suave (Shadow=1) com contorno leve (Outline=1)
+            # - Margem inferior de 40px para não ficar grudada na borda
+            $estiloSuave = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=40"
             
             & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
-                -vf "subtitles='$srtFormatado':force_style='$estiloNetflix'" `
+                -vf "subtitles='$srtFormatado':force_style='$estiloSuave'" `
                 -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
         }
     }
@@ -361,7 +349,6 @@ except Exception as e:
 
 $listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
 
-# 7. Slides
 if ($fazerSlides) {
     foreach ($video in $videos) {
         $prefixo = $video.BaseName
@@ -383,17 +370,14 @@ if ($fazerSlides) {
     }
 }
 
-# 8. IA Llama
 if ($fazerIA -and (Test-Path (Join-Path $raiz "gerador_ia.py"))) {
     & python (Join-Path $raiz "gerador_ia.py") $dirSaida
 }
 
-# 9. Cortes 9:16 (Com o mesmo estilo de legenda profissional)
 if ($fazerCortes -and (Test-Path (Join-Path $raiz "gerador_cortes.py"))) {
     & python (Join-Path $raiz "gerador_cortes.py") $dirSaida
 }
 
-# 10. Limpeza e Zip
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
