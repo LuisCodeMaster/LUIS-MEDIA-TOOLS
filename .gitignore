@@ -11,3 +11,7 @@ saida/*
 *.exe
 __pycache__/
 .vscode/
+
+*backup*.ps1
+*-v*.ps1
+split-temp.txt
