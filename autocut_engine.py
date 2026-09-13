@@ -39,7 +39,6 @@ def detectar_silencios(caminho_video, db="-32dB", duracao_minima=1.1):
     dur_res = subprocess.run(cmd_dur, stdout=subprocess.PIPE, text=True)
     duracao_total = float(dur_res.stdout.strip()) if dur_res.stdout.strip() else 0.0
 
-    # Margem suave de 0.12s para garantir o ataque e relaxamento natural das palavras
     margem = 0.12
     fala = []
     ponto_atual = 0.0
@@ -72,15 +71,18 @@ def exportar_edl(tramos_fala, arquivo_edl, nome_clip="CLIP"):
 def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
     if not tramos_fala:
         return
+    
     filtros = []
     concat_args = []
     for i, (inicio, fim) in enumerate(tramos_fala):
-        # afade suave nos tramos para evitar estalos eletroacústicos
         filtros.append(f"[0:v]trim=start={inicio:.3f}:end={fim:.3f},setpts=PTS-STARTPTS[v{i}];")
+        # Garante o corte limpo de áudio com micro-fade anti-estalo
         filtros.append(f"[0:a]atrim=start={inicio:.3f}:end={fim:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.015,afade=t=out:d=0.015[a{i}];")
         concat_args.append(f"[v{i}][a{i}]")
 
+    # Monta a string unificada do filtro complexo
     filtro_complexo = "".join(filtros) + "".join(concat_args) + f"concat=n={len(tramos_fala)}:v=1:a=1[outv][outa]"
+    
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
         "-i", caminho_video,
@@ -90,28 +92,36 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
         "-c:a", "aac", "-b:a", "192k",
         video_saida
     ]
-    subprocess.run(cmd)
+    resultado = subprocess.run(cmd, stderr=subprocess.PIPE, text=True)
+    if resultado.returncode != 0:
+        print(f"    [ERRO FFmpeg] {resultado.stderr}")
 
 def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None):
     if not pasta_saida_edl:
         pasta_saida_edl = pasta_saida_video
         
     nome_base = os.path.splitext(os.path.basename(caminho_video))[0]
-    print(f"    Detectando pausas de respiracao em: {nome_base}...")
+    print(f"    Detectando pausas em: {nome_base}...")
     fala, dur_total = detectar_silencios(caminho_video)
 
+    if not fala:
+        print("    [AVISO] Nenhum trecho valido encontrado. Copiando original.")
+        import shutil
+        shutil.copy(caminho_video, os.path.join(pasta_saida_video, f"{nome_base}_DINAMICO.mp4"))
+        return
+
     tempo_economizado = dur_total - sum(f - i for i, f in fala)
-    print(f"    [CORTE] {tempo_economizado:.1f}s removidos (ritmo acelerado)")
+    print(f"    [CORTE] {tempo_economizado:.1f}s de silencio eliminados.")
 
     # 1. Timeline EDL
     arquivo_edl = os.path.join(pasta_saida_edl, f"{nome_base}_timeline_cortes.edl")
     exportar_edl(fala, arquivo_edl, nome_clip=os.path.basename(caminho_video))
 
-    # 2. Renderização do vídeo dinâmico com micro-fade
+    # 2. Renderização do vídeo dinâmico COM ÁUDIO MAPEADO
     video_cortado = os.path.join(pasta_saida_video, f"{nome_base}_DINAMICO.mp4")
-    print(f"    [RENDER] Gerando video fluido com transicao anti-estalo...")
+    print(f"    [RENDER] Renderizando video fatiado com audio sincronizado...")
     renderizar_video_cortado(caminho_video, fala, video_cortado)
-    print(f"    [OK] Video dinamico gerado: {os.path.basename(video_cortado)}")
+    print(f"    [OK] Video dinamico com som gerado: {os.path.basename(video_cortado)}")
     return video_cortado
 
 if __name__ == "__main__":
