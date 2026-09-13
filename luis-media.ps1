@@ -6,14 +6,12 @@
 $ErrorActionPreference = "Stop"
 
 function Mostrar-Menu {
-
     Clear-Host
-
     Write-Host "================================" -ForegroundColor Cyan
     Write-Host "       LUIS MEDIA TOOLS" -ForegroundColor Cyan
     Write-Host "================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "[1] Processar aula"
+    Write-Host "[1] Processar aula (Pasta entrada ou Arquivo)"
     Write-Host "[2] Processar Short"
     Write-Host "[3] Transcrever"
     Write-Host "[4] Tratar audio"
@@ -30,27 +28,25 @@ function Pausar {
 }
 
 do {
-
     Mostrar-Menu
-
     $opcao = Read-Host "Escolha uma opcao"
 
     switch ($opcao) {
-
         "1" {
             Clear-Host
-            Write-Host "=== PROCESSAR AULA ===" -ForegroundColor Cyan
+            Write-Host "=== PROCESSAR AULAS ===" -ForegroundColor Cyan
             Write-Host ""
+            Write-Host "[ENTER direto] Processar todos os videos da pasta 'entrada'" -ForegroundColor Yellow
+            Write-Host "Ou digite o caminho de um video especifico:" -ForegroundColor DarkGray
+            $arquivo = Read-Host "Caminho do video"
 
-            $arquivo = Read-Host "Digite o caminho do video"
-
-            if (Test-Path $arquivo) {
-                & "$PSScriptRoot\processar-aula.ps1" $arquivo
-            }
-            else {
+            if ([string]::IsNullOrWhiteSpace($arquivo)) {
+                & "$PSScriptRoot\processar-aula.ps1"
+            } elseif (Test-Path $arquivo) {
+                & "$PSScriptRoot\processar-aula.ps1" -Arquivo $arquivo
+            } else {
                 Write-Host "Arquivo nao encontrado." -ForegroundColor Red
             }
-
             Pausar
         }
 
@@ -58,32 +54,25 @@ do {
             Clear-Host
             Write-Host "=== PROCESSAR SHORT ===" -ForegroundColor Cyan
             Write-Host ""
-
             if (Test-Path "$PSScriptRoot\processar-short.ps1") {
                 $arquivo = Read-Host "Digite o caminho do Short"
                 & "$PSScriptRoot\processar-short.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "O modulo processar-short.ps1 ainda nao foi criado." -ForegroundColor Yellow
             }
-
             Pausar
         }
 
         "3" {
             Clear-Host
-            Write-Host "=== TRANSCRIBER ===" -ForegroundColor Cyan
+            Write-Host "=== TRANSCREVER ===" -ForegroundColor Cyan
             Write-Host ""
-
             $arquivo = Read-Host "Digite o caminho do audio/video"
-
             if (Test-Path $arquivo) {
                 & "$PSScriptRoot\transcrever.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "Arquivo nao encontrado." -ForegroundColor Red
             }
-
             Pausar
         }
 
@@ -91,15 +80,12 @@ do {
             Clear-Host
             Write-Host "=== TRATAR AUDIO ===" -ForegroundColor Cyan
             Write-Host ""
-
             if (Test-Path "$PSScriptRoot\tratar-audio.ps1") {
                 $arquivo = Read-Host "Digite o caminho do audio/video"
                 & "$PSScriptRoot\tratar-audio.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "O modulo tratar-audio.ps1 ainda nao foi criado." -ForegroundColor Yellow
             }
-
             Pausar
         }
 
@@ -107,15 +93,12 @@ do {
             Clear-Host
             Write-Host "=== CORTAR VIDEO ===" -ForegroundColor Cyan
             Write-Host ""
-
             if (Test-Path "$PSScriptRoot\cortar-video.ps1") {
                 $arquivo = Read-Host "Digite o caminho do video"
                 & "$PSScriptRoot\cortar-video.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "O modulo cortar-video.ps1 ainda nao foi criado." -ForegroundColor Yellow
             }
-
             Pausar
         }
 
@@ -123,15 +106,12 @@ do {
             Clear-Host
             Write-Host "=== GERAR MATERIAL ===" -ForegroundColor Cyan
             Write-Host ""
-
             if (Test-Path "$PSScriptRoot\gerar-material.ps1") {
                 $arquivo = Read-Host "Digite o caminho da transcricao"
                 & "$PSScriptRoot\gerar-material.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "O modulo gerar-material.ps1 ainda nao foi criado." -ForegroundColor Yellow
             }
-
             Pausar
         }
 
@@ -139,15 +119,12 @@ do {
             Clear-Host
             Write-Host "=== CRIAR THUMBNAIL ===" -ForegroundColor Cyan
             Write-Host ""
-
             if (Test-Path "$PSScriptRoot\criar-thumbnail.ps1") {
                 $arquivo = Read-Host "Digite o caminho do video/imagem"
                 & "$PSScriptRoot\criar-thumbnail.ps1" $arquivo
-            }
-            else {
+            } else {
                 Write-Host "O modulo criar-thumbnail.ps1 ainda nao foi criado." -ForegroundColor Yellow
             }
-
             Pausar
         }
 
@@ -163,5 +140,4 @@ do {
             Start-Sleep -Seconds 1
         }
     }
-
 } while ($opcao -ne "0")
