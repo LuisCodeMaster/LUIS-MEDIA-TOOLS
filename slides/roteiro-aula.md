@@ -1,53 +1,64 @@
 ---
 
-# **Introdução ao Inglês**
-
-### **Professor**
-[ Professor ]
-Aula: O que é Inglês?
+# # Roteiro de Aula: O Que Fazer da Vida
+### Subtitulo: Planejando um Caminho Satisfeito
+#### Professor [Seu Nome]
 
 ---
 
-## **O que é Inglês?**
+### Slide 1: Introdução
+#### Objetivos da Aula:
+- Identificar a importância do planejamento na vida.
+- Estabelecer metas e objetivos pessoais.
 
-### [ATENCAO] Definição importante
-Inglês é uma língua inglesa, falada e escrita por milhões de pessoas em todo o mundo. É a segunda língua mais falada no mundo, depois do chinês.
-
----
-
-## **Origem do Inglês**
-
-### [NOTA] Evolução da língua
-O inglês tem origens incertas, mas é sabido que se desenvolveu a partir das línguas celtas e germânicas. Ao longo dos séculos, o inglês foi influenciado por outras línguas, como o latim e o francês.
+[NOTA] Lembre-se de que o planejamento é um processo contínuo e necessita de ajustes ao longo do caminho.
 
 ---
 
-## **Tipos de Inglês**
+### Slide 2: A Importância do Planejamento
+#### Tipos de Planejamento:
+- **Plano de Longo Prazo**: Estabelece metas a curto prazo e médio.
+- **Plano de Curto Prazo**: Defina tarefas diárias para alcançar os objetivos.
 
-### [DICA] Quais são os principais tipos?
-Existem vários tipos de inglês, incluindo:
-*   Ingles do Reino Unido (Brasil)
-*   Américano
-*   Australiano
-*   Canadense
+[ATENCAO] O planejamento é fundamental para o sucesso, mas também é importante ser flexível.
 
 ---
 
-## **Importância do Inglês**
+### Slide 3: Estabelecendo Metas e Objetivos
+#### Dicas para Escolher Muitas Metas:
+- **Muitos Objetivos**: Aumenta a motivação.
+- **Objetivos Alcançáveis**: Fácil de alcançar, aumenta a confiança.
 
-### [DICA] Por que é essencial aprender inglês?
-O inglês é uma língua fundamental para quem quer estudar, trabalhar ou se comunicar no mundo atual. Além disso, o conhecimento de inglês pode abrir portas para novas oportunidades e melhorar a qualidade de vida.
-
----
-
-## **Conclusão**
-
-### [NOTA] Recapitulação
-O inglês é uma língua rica e diversa que desempenha um papel fundamental na comunicação global. Compreender suas características, tipos e importância pode ajudar a tornar-se mais eficiente e conectado no mundo moderno.
+[NOTA] O importante é estabelecer metas que se alinham com o seu desejo pessoal e profissional.
 
 ---
 
-[ DICA ] Resumo das informações
-Inglês: língua inglesa, segunda língua mais falada no mundo.
-Origem incerta, influenciada por outras línguas ao longo dos séculos.
-Existem vários tipos de inglês, incluindo o Reino Unido, Américano e Australiano.
+### Slide 4: Priorização
+#### Dicas para Priorizar:
+- **Importância**: Avalie a importância da tarefa.
+- **Impacto**: Avalie o impacto na sua vida.
+
+[ATENCAO] A priorização é fundamental para garantir que você esteja trabalhando em suas metas mais importantes primeiro.
+
+---
+
+### Slide 5: Exemplo de Plano de Trabalho
+```javascript
+// Plano de Trabalho Semanal
+
+- **Lunes**: Atividade 1 (Importante)
+- **Terça**: Atividade 2 (Importante)
+- **Quinta**: Atividade 3 (Importante)
+
+[NOTA] Esse é apenas um exemplo, ajuste-o às suas necessidades.
+```
+
+---
+
+### Slide 6: Conclusão
+#### Recapitulação:
+- Planejamento é fundamental para o sucesso na vida.
+- Estabeleça metas e objetivos claros.
+- Priorize as tarefas com base na importância e impacto.
+
+[ATENCAO] Lembre-se de que planejar não significa ter um roteiro rígido, mas sim estabelecer um caminho para alcançar seus objetivos.

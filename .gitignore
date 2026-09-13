@@ -1,17 +1,19 @@
-﻿entrada/*
-saida/*
-*.mp4
-*.mkv
-*.avi
-*.mov
-*.wav
-*.mp3
-*.aac
-*.ogg
-*.exe
-__pycache__/
-.vscode/
+# Pastas de trabalho de mídia (muito pesadas)
+entrada/
+saida/
+temp/
+slides/*.html
 
-*backup*.ps1
-*-v*.ps1
+# Ambientes virtuais e cache do Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Arquivos do sistema operacional
+Thumbs.db
+Desktop.ini
+.DS_Store
+LUIS-MEDIA.exe
 split-temp.txt
+*-backup.ps1
