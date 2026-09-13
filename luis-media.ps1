@@ -5,12 +5,13 @@ Write-Host "===============================================" -ForegroundColor Cy
 Write-Host "  1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundColor White
 Write-Host "  2. Gerar/Regenerar Legendas a partir de JSON" -ForegroundColor White
 Write-Host "  3. Transcrever Arquivo Unico" -ForegroundColor White
-Write-Host "  4. Cortar Silencios de Audios/Aulas (Remover Pausas)" -ForegroundColor Yellow
-Write-Host "  5. Sair" -ForegroundColor DarkGray
+Write-Host "  4. Cortar Silencios de Audios/Aulas (Remover Pausas)" -ForegroundColor White
+Write-Host "  5. Unificar Todos os Audios da Aula em Um So" -ForegroundColor Yellow
+Write-Host "  6. Sair" -ForegroundColor DarkGray
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
 
-$opcao = Read-Host "Escolha uma opcao [1-5]"
+$opcao = Read-Host "Escolha uma opcao [1-6]"
 
 switch ($opcao) {
     "1" {
@@ -36,6 +37,9 @@ switch ($opcao) {
         .\remover-silencio.ps1
     }
     "5" {
+        .\juntar-audios.ps1
+    }
+    "6" {
         Write-Host "Saindo..." -ForegroundColor DarkGray
         exit 0
     }
