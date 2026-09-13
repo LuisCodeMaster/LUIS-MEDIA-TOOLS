@@ -132,15 +132,16 @@ foreach ($video in $videos) {
         & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af "highpass=f=80,loudnorm=I=-16:LRA=11:TP=-1.5" $audioTratTemp
     }
 
-    # 3. Transcricao via faster-whisper (ou Whisper padrao)
+    # 3. Transcricao via faster-whisper (silenciando avisos de symlink)
     $srtTemp = Join-Path $dirTempChunk "$nome.srt"
     if (-not (Test-Path $srtTemp)) {
         Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
         $scriptTranscricao = @"
-import sys
+import os, sys
+os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 try:
     from faster_whisper import WhisperModel
-    model = WhisperModel('medium', device='auto', compute_type='int8')
+    model = WhisperModel('medium', device='cpu', compute_type='int8')
     segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt')
     with open(r'$srtTemp', 'w', encoding='utf-8') as f:
         idx = 1
@@ -156,13 +157,13 @@ except Exception:
         python -c $scriptTranscricao
     }
 
-    # Copia para as pastas oficiais
+    # Copia para as pastas consolidadas
     if (Test-Path $srtTemp) { Copy-Item -Path (Join-Path $dirTempChunk "$nome.*") -Destination $pastas["1"] -Force }
     if (Test-Path $audioBrutoTemp) { Copy-Item -Path $audioBrutoTemp -Destination $pastas["2"] -Force }
     if (Test-Path $audioTratTemp) { Copy-Item -Path $audioTratTemp -Destination $pastas["3"] -Force }
 }
 
-# Salva o arquivo de minutagem dos capitulos
+# Salva minutagem
 $listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
 Write-Host "[OK] Minutagem para YouTube gerada em: $minutagemArquivo" -ForegroundColor Cyan
 
@@ -176,7 +177,7 @@ if ($slidesCount -eq 0) {
     }
 }
 
-# 7. Motor Editorial e PDF da Apostila
+# 7. Motor Editorial e PDF
 if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     Write-Host "`n>>> [EDITORIAL] Gerando apostila didatica..." -ForegroundColor Cyan
     & python (Join-Path $raiz "editorial_engine.py") $dirSaida
@@ -184,7 +185,6 @@ if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     if (Test-Path $apostilaHtml) {
         Copy-Item -Path $apostilaHtml -Destination $pastas["5"] -Force
         
-        # Gera PDF automaticamente usando o Microsoft Edge headless
         $edgePaths = @(
             "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
@@ -198,7 +198,7 @@ if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     }
 }
 
-# 8. Limpeza de pastas temporarias
+# 8. Limpeza de pastas intermediárias de chunks
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 # 9. Empacotamento
@@ -206,7 +206,15 @@ Write-Host "`n>>> [EMPACOTAMENTO] Gerando entregavel ZIP..." -ForegroundColor Cy
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
 Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"] -DestinationPath $arquivoZip -Force
 
-# 10. Notificacao Sonora e Visual do Windows
+# 10. Faxina pós-empacotamento (segurança de disco)
+if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
+    Write-Host ">>> [LIMPEZA] Removendo pastas soltas intermediarias (SSD protegido)..." -ForegroundColor DarkGray
+    foreach ($p in $pastas.Values) {
+        if (Test-Path $p) { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# 11. Notificacao Sonora e Visual
 [System.Console]::Beep(1000, 300)
 [System.Console]::Beep(1500, 400)
 try {
@@ -214,12 +222,12 @@ try {
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
     $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Finalizado!"
-    $notify.BalloonTipText = "Todos os entregáveis e o arquivo ZIP de [$nomeAula] estão prontos."
+    $notify.BalloonTipText = "Entregavel [$nomeAula] empacotado e pastas intermediarias limpas."
     $notify.Visible = $true
     $notify.ShowBalloonTip(4000)
 } catch {}
 
-# Abre o destino no Explorer
+# Abre a pasta final
 explorer.exe $dirSaida
 
 Write-Host "`n=========================================================" -ForegroundColor Green
