@@ -83,7 +83,7 @@ if ($videos.Count -eq 0) {
 }
 
 Write-Host "`n=========================================================" -ForegroundColor Cyan
-Write-Host "   LUIS-MEDIA-TOOLS: CONSOLIDACAO DEFINITIVA             " -ForegroundColor Cyan
+Write-Host "   LUIS-MEDIA-TOOLS: CONSOLIDACAO DEFINITIVA + LLAMA     " -ForegroundColor Cyan
 Write-Host "   Projeto: $nomeAula                                    " -ForegroundColor Cyan
 Write-Host "   Origem:  $dirEntrada                                  " -ForegroundColor Cyan
 Write-Host "   Destino: $dirSaida                                    " -ForegroundColor Cyan
@@ -205,15 +205,21 @@ if (Test-Path (Join-Path $raiz "editorial_engine.py")) {
     }
 }
 
-# 8. Limpeza de subpastas intermediarias de processamento
+# 8. Chamada da IA Local Llama (Resumo Executivo e Quiz de Fixação)
+if (Test-Path (Join-Path $raiz "gerador_ia.py")) {
+    Write-Host "`n>>> [IA LOCAL - LLAMA] Criando Resumo Executivo e Quiz..." -ForegroundColor Magenta
+    & python (Join-Path $raiz "gerador_ia.py") $dirSaida
+}
+
+# 9. Limpeza de subpastas intermediarias de processamento
 Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-# 9. Empacotamento dos entregaveis (pastas 1 a 6)
+# 10. Empacotamento dos entregaveis (pastas 1 a 6)
 Write-Host "`n>>> [EMPACOTAMENTO] Gerando entregavel ZIP..." -ForegroundColor Cyan
 $arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
 Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"] -DestinationPath $arquivoZip -Force
 
-# 10. Faxina de intermediarios (SSD protegido)
+# 11. Faxina de intermediarios (SSD protegido)
 if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
     Write-Host ">>> [LIMPEZA] Removendo pastas soltas intermediarias..." -ForegroundColor DarkGray
     foreach ($p in $pastas.Values) {
@@ -221,7 +227,7 @@ if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
     }
 }
 
-# 11. Mover videos para a raiz do destino
+# 12. Mover videos para a raiz do destino
 Write-Host "`n>>> [CONSOLIDACAO] Movendo videos diretamente para o destino final..." -ForegroundColor Cyan
 foreach ($video in $videos) {
     if ($video.DirectoryName -ne $dirSaida) {
@@ -231,7 +237,7 @@ foreach ($video in $videos) {
     }
 }
 
-# 12. Faxina da pasta de origem (se ficou vazia)
+# 13. Faxina da pasta de origem (se ficou vazia)
 if ((Test-Path $dirEntrada) -and ($dirEntrada -ne $dirSaida) -and ($dirEntrada -ne $raiz)) {
     $itensRestantes = Get-ChildItem -Path $dirEntrada -Force
     if ($itensRestantes.Count -eq 0) {
@@ -240,7 +246,7 @@ if ((Test-Path $dirEntrada) -and ($dirEntrada -ne $dirSaida) -and ($dirEntrada -
     }
 }
 
-# 13. Notificacao Sonora e Alerta Visual
+# 14. Notificacao Sonora e Alerta Visual
 [System.Console]::Beep(1000, 300)
 [System.Console]::Beep(1500, 400)
 try {
@@ -248,7 +254,7 @@ try {
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
     $notify.BalloonTipTitle = "LUIS-MEDIA-TOOLS Consolidado!"
-    $notify.BalloonTipText = "Videos e entregaveis unificados em [$nomeAula]."
+    $notify.BalloonTipText = "Videos, entregaveis, Resumo e Quiz gerados em [$nomeAula]."
     $notify.Visible = $true
     $notify.ShowBalloonTip(4000)
 } catch {}
