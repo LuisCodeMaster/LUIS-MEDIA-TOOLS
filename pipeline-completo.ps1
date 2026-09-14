@@ -12,6 +12,7 @@ $configFile = Join-Path $raiz "config_presets.json"
 
 $cfg = @{
     PresetIndex = 0; AutoCut = $true; EDL = $true; Hardsub = $true
+    MesclarVideos = $true # Nova preferencia de fusao
     Slides = $true; PDF = $true; IA = $true; Resumo = $true; Quiz = $true; Cortes = $true; QtdCortes = 3
 }
 
@@ -39,11 +40,11 @@ if (-not (Test-Path $dirEntrada)) {
 $destinoSugerido = if ($PastaDestino -ne "") { $PastaDestino } else { Join-Path $raiz "saida\$nomeAula" }
 
 # =========================================================
-# STUDIO HUB GUI
+# STUDIO HUB GUI — COM OPÇÃO DE MESCLAGEM DE VÍDEOS
 # =========================================================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "LUIS-MEDIA-TOOLS — Production Studio Hub"
-$form.Size = New-Object System.Drawing.Size(620, 640)
+$form.Size = New-Object System.Drawing.Size(620, 680)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -107,46 +108,55 @@ $grpPreset.Controls.Add($cmbPresets)
 
 $lblPresetDesc = New-Object System.Windows.Forms.Label
 $lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(200, 32)
-$lblPresetDesc.Text = "Voz Broadcast + Legenda Fluida para Aulas."
+$lblPresetDesc.Text = "Controle unificado de vídeos e esteira."
 $lblPresetDesc.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
 $lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $grpPreset.Controls.Add($lblPresetDesc)
 
 $tabControl = New-Object System.Windows.Forms.TabControl
-$tabControl.Location = New-Object System.Drawing.Point(20, 215); $tabControl.Size = New-Object System.Drawing.Size(565, 290)
+$tabControl.Location = New-Object System.Drawing.Point(20, 215); $tabControl.Size = New-Object System.Drawing.Size(565, 320)
 $tabControl.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($tabControl)
 
+# ABA 1
 $tabVideo = New-Object System.Windows.Forms.TabPage
 $tabVideo.Text = "Corte & Voz Pro"
 $tabVideo.BackColor = [System.Drawing.Color]::White
 $tabControl.TabPages.Add($tabVideo)
 
+$chkMesclar = New-Object System.Windows.Forms.CheckBox
+$chkMesclar.Location = New-Object System.Drawing.Point(20, 18); $chkMesclar.Size = New-Object System.Drawing.Size(510, 25)
+$chkMesclar.Text = "Mesclar todos os vídeos da pasta em um único arquivo inicial"
+$chkMesclar.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkMesclar.Checked = $cfg.MesclarVideos
+$tabVideo.Controls.Add($chkMesclar)
+
 $chkAutoCut = New-Object System.Windows.Forms.CheckBox
-$chkAutoCut.Location = New-Object System.Drawing.Point(20, 18); $chkAutoCut.Size = New-Object System.Drawing.Size(510, 25)
+$chkAutoCut.Location = New-Object System.Drawing.Point(20, 52); $chkAutoCut.Size = New-Object System.Drawing.Size(510, 25)
 $chkAutoCut.Text = "Ativar Auto-Cut Dinâmico (Fatiar pausas)"
 $chkAutoCut.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $chkAutoCut.Checked = $cfg.AutoCut
 $tabVideo.Controls.Add($chkAutoCut)
 
 $chkEDL = New-Object System.Windows.Forms.CheckBox
-$chkEDL.Location = New-Object System.Drawing.Point(40, 55); $chkEDL.Size = New-Object System.Drawing.Size(480, 24)
+$chkEDL.Location = New-Object System.Drawing.Point(40, 85); $chkEDL.Size = New-Object System.Drawing.Size(480, 24)
 $chkEDL.Text = "Exportar Timeline EDL (DaVinci Resolve / Premiere)"
 $chkEDL.Checked = $cfg.EDL
 $tabVideo.Controls.Add($chkEDL)
 
 $chkAudioBroadcast = New-Object System.Windows.Forms.CheckBox
-$chkAudioBroadcast.Location = New-Object System.Drawing.Point(40, 85); $chkAudioBroadcast.Size = New-Object System.Drawing.Size(480, 24)
+$chkAudioBroadcast.Location = New-Object System.Drawing.Point(40, 115); $chkAudioBroadcast.Size = New-Object System.Drawing.Size(480, 24)
 $chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + Compressor + R128)"
 $chkAudioBroadcast.Checked = $true
 $tabVideo.Controls.Add($chkAudioBroadcast)
 
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox
-$chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 115); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
-$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"
+$chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 145); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
+$chkHardsubHoriz.Text = "Renderizar Legenda Embutida no Vídeo Principal"
 $chkHardsubHoriz.Checked = $cfg.Hardsub
 $tabVideo.Controls.Add($chkHardsubHoriz)
 
+# ABA 2
 $tabDidatico = New-Object System.Windows.Forms.TabPage
 $tabDidatico.Text = "Material & IA"
 $tabDidatico.BackColor = [System.Drawing.Color]::White
@@ -184,6 +194,7 @@ $chkQuiz.Text = "Gerar Quiz Interativo de Fixação"
 $chkQuiz.Checked = $cfg.Quiz
 $tabDidatico.Controls.Add($chkQuiz)
 
+# ABA 3
 $tabRedes = New-Object System.Windows.Forms.TabPage
 $tabRedes.Text = "Redes Sociais (9:16)"
 $tabRedes.BackColor = [System.Drawing.Color]::White
@@ -198,14 +209,14 @@ $tabRedes.Controls.Add($chkCortes)
 
 $cmbPresets.Add_SelectedIndexChanged({
     switch ($cmbPresets.SelectedIndex) {
-        0 { $chkAutoCut.Checked = $true; $chkEDL.Checked = $true; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $true; $chkSlides.Checked = $true; $chkPDF.Checked = $true; $chkIA.Checked = $true; $chkResumo.Checked = $true; $chkQuiz.Checked = $true; $chkCortes.Checked = $true }
-        1 { $chkAutoCut.Checked = $true; $chkEDL.Checked = $false; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $true; $chkSlides.Checked = $false; $chkPDF.Checked = $false; $chkIA.Checked = $false; $chkResumo.Checked = $false; $chkQuiz.Checked = $false; $chkCortes.Checked = $true }
-        2 { $chkAutoCut.Checked = $true; $chkEDL.Checked = $true; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $false; $chkSlides.Checked = $false; $chkPDF.Checked = $false; $chkIA.Checked = $false; $chkResumo.Checked = $false; $chkQuiz.Checked = $false; $chkCortes.Checked = $false }
+        0 { $chkMesclar.Checked = $true; $chkAutoCut.Checked = $true; $chkEDL.Checked = $true; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $true; $chkSlides.Checked = $true; $chkPDF.Checked = $true; $chkIA.Checked = $true; $chkResumo.Checked = $true; $chkQuiz.Checked = $true; $chkCortes.Checked = $true }
+        1 { $chkMesclar.Checked = $true; $chkAutoCut.Checked = $true; $chkEDL.Checked = $false; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $true; $chkSlides.Checked = $false; $chkPDF.Checked = $false; $chkIA.Checked = $false; $chkResumo.Checked = $false; $chkQuiz.Checked = $false; $chkCortes.Checked = $true }
+        2 { $chkMesclar.Checked = $true; $chkAutoCut.Checked = $true; $chkEDL.Checked = $true; $chkAudioBroadcast.Checked = $true; $chkHardsubHoriz.Checked = $false; $chkSlides.Checked = $false; $chkPDF.Checked = $false; $chkIA.Checked = $false; $chkResumo.Checked = $false; $chkQuiz.Checked = $false; $chkCortes.Checked = $false }
     }
 })
 
 $btnIniciar = New-Object System.Windows.Forms.Button
-$btnIniciar.Location = New-Object System.Drawing.Point(345, 525); $btnIniciar.Size = New-Object System.Drawing.Size(240, 48)
+$btnIniciar.Location = New-Object System.Drawing.Point(345, 555); $btnIniciar.Size = New-Object System.Drawing.Size(240, 48)
 $btnIniciar.Text = "▶ INICIAR PROCESSAMENTO"
 $btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
@@ -215,7 +226,7 @@ $btnIniciar.DialogResult = [System.Windows.Forms.DialogResult]::OK
 $form.Controls.Add($btnIniciar)
 
 $btnCancelar = New-Object System.Windows.Forms.Button
-$btnCancelar.Location = New-Object System.Drawing.Point(220, 525); $btnCancelar.Size = New-Object System.Drawing.Size(115, 48)
+$btnCancelar.Location = New-Object System.Drawing.Point(220, 555); $btnCancelar.Size = New-Object System.Drawing.Size(115, 48)
 $btnCancelar.Text = "Cancelar"
 $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $btnCancelar.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
@@ -227,13 +238,14 @@ $form.CancelButton = $btnCancelar
 if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
 
 $novoCfg = [PSCustomObject]@{
-    PresetIndex = $cmbPresets.SelectedIndex; AutoCut = $chkAutoCut.Checked; EDL = $chkEDL.Checked
-    Hardsub = $chkHardsubHoriz.Checked; Slides = $chkSlides.Checked; PDF = $chkPDF.Checked
-    IA = $chkIA.Checked; Resumo = $chkResumo.Checked; Quiz = $chkQuiz.Checked; Cortes = $chkCortes.Checked
+    PresetIndex = $cmbPresets.SelectedIndex; MesclarVideos = $chkMesclar.Checked; AutoCut = $chkAutoCut.Checked
+    EDL = $chkEDL.Checked; Hardsub = $chkHardsubHoriz.Checked; Slides = $chkSlides.Checked
+    PDF = $chkPDF.Checked; IA = $chkIA.Checked; Resumo = $chkResumo.Checked; Quiz = $chkQuiz.Checked; Cortes = $chkCortes.Checked
 }
 $novoCfg | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
 
 $dirSaida       = $txtDestino.Text.Trim()
+$fazerMesclar   = $chkMesclar.Checked
 $fazerAutoCut   = $chkAutoCut.Checked
 $fazerEDL       = $chkEDL.Checked
 $fazerHardsub   = $chkHardsubHoriz.Checked
@@ -257,12 +269,53 @@ foreach ($p in $pastas.Values) {
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
 
-$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
-if ($videos.Count -eq 0) {
-    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
-    if ($videos.Count -eq 0) { exit 0 }
+$videosIniciais = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
+if ($videosIniciais.Count -eq 0) { exit 0 }
+
+# SEÇÃO DE MESCLAGEM DE MÚLTIPLOS VÍDEOS
+$videoAlvoFinal = $null
+$nomeUnificado = $nomeAula
+
+if ($fazerMesclar -and ($videosIniciais.Count -gt 1)) {
+    Write-Host "    [FUSAO] Mesclando $($videosIniciais.Count) videos em um unico arquivo..." -ForegroundColor Cyan
+    $pastaTempMerge = Join-Path $dirSaida "temp_merge"
+    if (Test-Path $pastaTempMerge) { Remove-Item -Recurse -Force $pastaTempMerge }
+    New-Item -ItemType Directory -Path $pastaTempMerge -Force | Out-Null
+
+    $listaConcatTxt = Join-Path $pastaTempMerge "lista_merge.txt"
+    $chunksPadronizados = @()
+
+    foreach ($v in $videosIniciais) {
+        $chunkPadrao = Join-Path $pastaTempMerge "$($v.BaseName)_std.mp4"
+        # Padroniza cada vídeo para 1080p, 48kHz estéreo para evitar falha no concat
+        & ffmpeg -hide_banner -loglevel error -y -i $v.FullName -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k -ar 48000 -ac 2 $chunkPadrao
+        if (Test-Path $chunkPadrao) {
+            $chunksPadronizados += $chunkPadrao
+        }
+    }
+
+    if ($chunksPadronizados.Count -gt 0) {
+        $conteudoTxt = ""
+        foreach ($c in $chunksPadronizados) {
+            $conteudoTxt += "file '$($c.Replace('\','/'))'`n"
+        }
+        Set-Content -Path $listaConcatTxt -Value $conteudoTxt -Encoding UTF8
+
+        $videoUnificadoSaida = Join-Path $dirSaida "${nomeUnificado}.mp4"
+        & ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i $listaConcatTxt -c copy $videoUnificadoSaida
+
+        if (Test-Path $videoUnificadoSaida) {
+            $videoAlvoFinal = Get-Item $videoUnificadoSaida
+        }
+        Remove-Item -Recurse -Force $pastaTempMerge
+    }
 }
 
+if (-not $videoAlvoFinal) {
+    $videoAlvoFinal = $videosIniciais[0] # Se houver apenas 1 ou mesclagem desativada
+}
+
+$videos = @($videoAlvoFinal)
 $minutagemArquivo = Join-Path $pastas["6"] "capitulos-youtube.txt"
 $tempoAcumulado = 0.0
 $listaCapitulos = @()
@@ -302,67 +355,34 @@ foreach ($video in $videos) {
     & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af $cadeiaFiltrosVoz $audioTratTemp
 
     $srtFinal = Join-Path $pastas["1"] "$nome.srt"
-    $assFinal = Join-Path $pastas["1"] "$nome.ass"
-    
-    Write-Host "    Transcrevendo com Whisper (Word Timestamps) para Legenda Fluida..." -ForegroundColor Yellow
+    Write-Host "    Transcrevendo com Whisper..." -ForegroundColor Yellow
     $scriptTranscricao = @"
 import os
 try:
     from faster_whisper import WhisperModel
     model = WhisperModel('medium', device='cpu', compute_type='int8')
-    segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt', word_timestamps=True)
-    
-    with open(r'$srtFinal', 'w', encoding='utf-8') as f_srt, open(r'$assFinal', 'w', encoding='utf-8') as f_ass:
-        # Cabecalho do formato ASS para gerenciar fade suave e elegancia na borda
-        f_ass.write('[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n')
-        f_ass.write('[V4+ Styles]\n')
-        f_ass.write('Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n')
-        # Estilo Aula Fluida: Arial limpa, tamanho 54 (proporcional a 1080p), cor branca com sombra suave e fundo semitransparente discreto
-        f_ass.write('Style: AulaFluida,Arial,54,&H00FFFFFF,&H0000FFFF,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,1.5,1,2,40,40,35,1\n\n')
-        f_ass.write('[Events]\n')
-        f_ass.write('Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n')
-        
+    segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt')
+    with open(r'$srtFinal', 'w', encoding='utf-8') as f:
         idx = 1
-        for seg in segments:
-            h1, m1, s1 = int(seg.start // 3600), int((seg.start % 3600) // 60), seg.start % 60
-            h2, m2, s2 = int(seg.end // 3600), int((seg.end % 3600) // 60), seg.end % 60
-            
-            tc_srt1 = f'{h1:02d}:{m1:02d}:{s1:06.3f}'.replace('.', ',')
-            tc_srt2 = f'{h2:02d}:{m2:02d}:{s2:06.3f}'.replace('.', ',')
-            f_srt.write(f'{idx}\n{tc_srt1} --> {tc_srt2}\n{seg.text.strip()}\n\n')
-            
-            # Formato de tempo para ASS (H:MM:SS.cc)
-            def fmt_ass(t):
-                th = int(t // 3600)
-                tm = int((t % 3600) // 60)
-                ts = t % 60
-                return f'{th}:{tm:02d}:{ts:05.2f}'
-            
-            t_start = fmt_ass(seg.start)
-            t_end = fmt_ass(seg.end)
-            texto_limpo = seg.text.strip().replace('\n', ' ')
-            
-            # Adiciona efeito imersivo de fade-in suave de 150ms na legenda da aula
-            f_ass.write(f'Dialogue: 0,{t_start},{t_end},AulaFluida,,0,0,0,,{{\\fad(150,150)}}{texto_limpo}\n')
+        for s in segments:
+            h1, m1, s1 = int(s.start // 3600), int((s.start % 3600) // 60), s.start % 60
+            h2, m2, s2 = int(s.end // 3600), int((s.end % 3600) // 60), s.end % 60
+            f.write(f'{idx}\n{h1:02d}:{m1:02d}:{s1:06.3f}'.replace('.', ',') + ' --> ' + f'{h2:02d}:{m2:02d}:{s2:06.3f}'.replace('.', ',') + f'\n{s.text.strip()}\n\n')
             idx += 1
-            
-    print('    [OK] Legendas SRT e ASS fluidas geradas com sucesso.')
+    print('    [OK] Legenda gerada.')
 except Exception as e:
     print(f'    [ERRO WHISPER] {e}')
 "@
     python -c $scriptTranscricao
     Start-Sleep -Seconds 1
 
-    # HARD SUB USANDO O ARQUIVO ASS FLUIDO (Com animação de fade suave e margem elegante)
-    if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
+    if ($fazerHardsub -and (Test-Path $srtFinal) -and ((Get-Item $srtFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao com Legenda Fluida para Aulas..." -ForegroundColor Magenta
-            $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
-            
-            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
-                -vf "subtitles='$assFormatado'" `
-                -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
+            Write-Host "    Renderizando versao com Legenda na Borda..." -ForegroundColor Magenta
+            $srtFormatado = $srtFinal.Replace("\", "/").Replace(":", "\:")
+            $estiloBordaInferior = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=22"
+            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles='$srtFormatado':force_style='$estiloBordaInferior'" -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
         }
     }
 
@@ -413,7 +433,7 @@ if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
 }
 
 foreach ($video in $videos) {
-    if ($video.DirectoryName -ne $dirSaida) {
+    if ($video.DirectoryName -ne $dirSaida -and (Test-Path $video.FullName)) {
         Move-Item -LiteralPath $video.FullName -Destination (Join-Path $dirSaida $video.Name) -Force
     }
 }
