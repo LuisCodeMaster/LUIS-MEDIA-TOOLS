@@ -1,0 +1,12 @@
+﻿{
+    "PresetIndex":  0,
+    "AutoCut":  true,
+    "EDL":  false,
+    "Hardsub":  true,
+    "Slides":  true,
+    "PDF":  true,
+    "IA":  true,
+    "Resumo":  true,
+    "Quiz":  true,
+    "Cortes":  false
+}

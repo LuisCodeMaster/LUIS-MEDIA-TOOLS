@@ -117,6 +117,37 @@ $tabControl.Location = New-Object System.Drawing.Point(20, 215); $tabControl.Siz
 $tabControl.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($tabControl)
 
+$tabSelecao = New-Object System.Windows.Forms.TabPage
+$tabSelecao.Text = "📁 Selecionar Vídeos"
+$tabSelecao.BackColor = [System.Drawing.Color]::White
+$tabControl.TabPages.Add($tabSelecao)
+
+$lblInfoSel = New-Object System.Windows.Forms.Label
+$lblInfoSel.Text = "Selecione os vídeos que deseja tratar nesta execução:"
+$lblInfoSel.Location = New-Object System.Drawing.Point(15, 15); $lblInfoSel.Size = New-Object System.Drawing.Size(400, 20)
+$lblInfoSel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$tabSelecao.Controls.Add($lblInfoSel)
+
+$chkListVideos = New-Object System.Windows.Forms.CheckedListBox
+$chkListVideos.Location = New-Object System.Drawing.Point(15, 40); $chkListVideos.Size = New-Object System.Drawing.Size(530, 150)
+$chkListVideos.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$chkListVideos.CheckOnClick = $true
+
+# Carrega os vídeos disponíveis na pasta
+$arquivosDisco = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
+foreach ($arq in $arquivosDisco) { [void]$chkListVideos.Items.Add($arq.Name, $true) }
+$tabSelecao.Controls.Add($chkListVideos)
+
+$btnTodos = New-Object System.Windows.Forms.Button
+$btnTodos.Text = "Marcar Todos"; $btnTodos.Location = New-Object System.Drawing.Point(15, 200); $btnTodos.Size = New-Object System.Drawing.Size(120, 26)
+$btnTodos.Add_Click({ for ($i = 0; $i -lt $chkListVideos.Items.Count; $i++) { $chkListVideos.SetItemChecked($i, $true) } })
+$tabSelecao.Controls.Add($btnTodos)
+
+$btnNenhum = New-Object System.Windows.Forms.Button
+$btnNenhum.Text = "Desmarcar Todos"; $btnNenhum.Location = New-Object System.Drawing.Point(145, 200); $btnNenhum.Size = New-Object System.Drawing.Size(130, 26)
+$btnNenhum.Add_Click({ for ($i = 0; $i -lt $chkListVideos.Items.Count; $i++) { $chkListVideos.SetItemChecked($i, $false) } })
+$tabSelecao.Controls.Add($btnNenhum)
+
 $tabVideo = New-Object System.Windows.Forms.TabPage
 $tabVideo.Text = "Corte & Voz Pro"
 $tabVideo.BackColor = [System.Drawing.Color]::White
@@ -211,7 +242,15 @@ $btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawin
 $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
 $btnIniciar.ForeColor = [System.Drawing.Color]::White
 $btnIniciar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$btnIniciar.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$btnIniciar.Add_Click({
+    # Captura a seleção ANTES de fechar a janela
+    $global:videosSelecionados = @()
+    foreach ($item in $chkListVideos.CheckedItems) { $global:videosSelecionados += $item.ToString() }
+    
+    # Fecha o formulário manualmente com sucesso
+    $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Close()
+})
 $form.Controls.Add($btnIniciar)
 
 $btnCancelar = New-Object System.Windows.Forms.Button
@@ -267,7 +306,27 @@ $minutagemArquivo = Join-Path $pastas["6"] "capitulos-youtube.txt"
 $tempoAcumulado = 0.0
 $listaCapitulos = @()
 
+
+# =======================================================
+# FILTRO DE SELEÇÃO PROFISSIONAL
+# =======================================================
+if ($global:videosSelecionados -ne $null) {
+    if ($global:videosSelecionados.Count -gt 0) {
+        $videos = $videos | Where-Object { $global:videosSelecionados -contains $_.Name }
+        Write-Host "`n=======================================================" -ForegroundColor Cyan
+        Write-Host " [MODO SELETIVO] Processando $($videos.Count) vídeo(s):" -ForegroundColor Green
+        $videos | ForEach-Object { Write-Host "   -> $($_.Name)" -ForegroundColor Green }
+        Write-Host "=======================================================`n" -ForegroundColor Cyan
+    } else {
+        Write-Host "`n[AVISO] Nenhum vídeo marcado na aba de seleção. Operação cancelada." -ForegroundColor Red
+        exit 0
+    }
+}
+# =======================================================
+
 foreach ($video in $videos) {
+    Write-Host "`n>>> INICIANDO PROCESSAMENTO: $($video.Name) <<<" -ForegroundColor Magenta
+
     $nome = $video.BaseName
     $dirTempChunk = Join-Path $dirSaida $nome
     if (-not (Test-Path $dirTempChunk)) { New-Item -ItemType Directory -Path $dirTempChunk -Force | Out-Null }
@@ -360,9 +419,7 @@ except Exception as e:
             Write-Host "    Renderizando versao com Legenda Fluida para Aulas..." -ForegroundColor Magenta
             $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
             
-            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo `
-                -vf "subtitles='$assFormatado'" `
-                -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
+            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles=\'$assFormatado\'" -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
         }
     }
 
