@@ -135,7 +135,8 @@ $chkListVideos.CheckOnClick = $true
 
 # Carrega os vídeos disponíveis na pasta
 $arquivosDisco = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
-foreach ($arq in $arquivosDisco) { [void]$chkListVideos.Items.Add($arq.Name, $true) }
+$global:mapaVideos = @{}
+foreach ($arq in $arquivosDisco) { $global:mapaVideos[$arq.Name] = $arq.FullName; [void]$chkListVideos.Items.Add($arq.Name, $false) }
 $tabSelecao.Controls.Add($chkListVideos)
 
 $btnTodos = New-Object System.Windows.Forms.Button
@@ -245,13 +246,41 @@ $btnIniciar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $btnIniciar.Add_Click({
     # Captura a seleção ANTES de fechar a janela
     $global:videosSelecionados = @()
-    foreach ($item in $chkListVideos.CheckedItems) { $global:videosSelecionados += $item.ToString() }
+    foreach ($item in $chkListVideos.CheckedItems) { $global:videosSelecionados += $global:mapaVideos[$item.ToString()] }
     
     # Fecha o formulário manualmente com sucesso
     $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.Close()
 })
 $form.Controls.Add($btnIniciar)
+
+# === DRAG AND DROP ABSOLUTO (SEM BLOQUEIOS) ===
+$acaoDragEnter = {
+    param($sender, $e)
+    if ($e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) { $e.Effect = 'Copy' }
+}
+$acaoDragDrop = {
+    param($sender, $e)
+    $files = $e.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+    if (-not $files) { return }
+    foreach ($f in $files) {
+        $abs = [System.IO.Path]::GetFullPath($f)
+        $name = [System.IO.Path]::GetFileName($abs)
+        $global:mapaVideos[$name] = $abs
+        $exists = $false
+        foreach ($item in $chkListVideos.Items) { if ($item.ToString() -eq $name) { $exists = $true; break } }
+        if (-not $exists) {
+            $idx = $chkListVideos.Items.Add($name, $true)
+            $chkListVideos.SetItemChecked($idx, $true)
+        }
+    }
+    Write-Host "[SUCESSO] Vídeo capturado de pasta externa e adicionado à interface!" -ForegroundColor Green
+}
+$form.AllowDrop = $true; $form.Add_DragEnter($acaoDragEnter); $form.Add_DragDrop($acaoDragDrop)
+$chkListVideos.AllowDrop = $true; $chkListVideos.Add_DragEnter($acaoDragEnter); $chkListVideos.Add_DragDrop($acaoDragDrop)
+$tabSelecao.AllowDrop = $true; $tabSelecao.Add_DragEnter($acaoDragEnter); $tabSelecao.Add_DragDrop($acaoDragDrop)
+$tabControl.AllowDrop = $true; $tabControl.Add_DragEnter($acaoDragEnter); $tabControl.Add_DragDrop($acaoDragDrop)
+# ===============================================
 
 $btnCancelar = New-Object System.Windows.Forms.Button
 $btnCancelar.Location = New-Object System.Drawing.Point(220, 525); $btnCancelar.Size = New-Object System.Drawing.Size(115, 48)
@@ -264,6 +293,15 @@ $form.AcceptButton = $btnIniciar
 $form.CancelButton = $btnCancelar
 
 if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
+
+# [CORREÇÃO DO MOTOR]
+$videos = @()
+foreach ($v in $global:videosSelecionados) {
+    if (Test-Path $v) {
+        $videos += (Get-Item $v)
+    }
+}
+Write-Host "`n[START] Pipeline iniciando com $($videos.Count) vídeo(s)..." -ForegroundColor Cyan
 
 $novoCfg = [PSCustomObject]@{
     PresetIndex = $cmbPresets.SelectedIndex; AutoCut = $chkAutoCut.Checked; EDL = $chkEDL.Checked
@@ -295,8 +333,12 @@ $pastas = @{
 foreach ($p in $pastas.Values) {
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
-
-$videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
+# 
+if (-not $videos -or $videos.Count -eq 0) {
+    $videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
+} else {
+    if ($videos[0].FullName) { $dirEntrada = Split-Path $videos[0].FullName -Parent }
+}
 if ($videos.Count -eq 0) {
     $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
     if ($videos.Count -eq 0) { exit 0 }
@@ -312,7 +354,7 @@ $listaCapitulos = @()
 # =======================================================
 if ($global:videosSelecionados -ne $null) {
     if ($global:videosSelecionados.Count -gt 0) {
-        $videos = $videos | Where-Object { $global:videosSelecionados -contains $_.Name }
+        # Filtro desativado: a lista já vem validada e com caminhos absolutos do Drag & Drop
         Write-Host "`n=======================================================" -ForegroundColor Cyan
         Write-Host " [MODO SELETIVO] Processando $($videos.Count) vídeo(s):" -ForegroundColor Green
         $videos | ForEach-Object { Write-Host "   -> $($_.Name)" -ForegroundColor Green }
@@ -478,3 +520,7 @@ foreach ($video in $videos) {
 [System.Console]::Beep(1000, 300)
 [System.Console]::Beep(1500, 400)
 explorer.exe $dirSaida
+
+
+
+
