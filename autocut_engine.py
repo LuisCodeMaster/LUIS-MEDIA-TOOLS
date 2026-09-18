@@ -11,7 +11,7 @@ def segundos_para_timecode(segundos, fps=30):
     quadros = int((segundos - int(segundos)) * fps)
     return f"{horas:02d}:{minutos:02d}:{segs:02d}:{quadros:02d}"
 
-def detectar_silencios(caminho_audio, db="-32dB", duracao_minima=1.1):
+def detectar_silencios(caminho_audio, db="-32dB", duracao_minima=1.1, ignorar_silencio_longo=False, limite_silencio=2.5):
     cmd = [
         "ffmpeg", "-hide_banner",
         "-i", caminho_audio,
@@ -40,7 +40,13 @@ def detectar_silencios(caminho_audio, db="-32dB", duracao_minima=1.1):
     dur_res = subprocess.run(cmd_dur, stdout=subprocess.PIPE, text=True)
     duracao_total = float(dur_res.stdout.strip()) if dur_res.stdout.strip() else 0.0
 
-    margem = 0.12
+    if ignorar_silencio_longo:
+        silencios_ignorados = [s for s in silencios if (s[1] - s[0]) >= limite_silencio]
+        silencios = [s for s in silencios if (s[1] - s[0]) < limite_silencio]
+        if silencios_ignorados:
+            print(f"    [REGRA DINÂMICA] {len(silencios_ignorados)} pausa(s) >= {limite_silencio}s preservada(s)!")
+
+    margem = 0.25
     fala = []
     ponto_atual = 0.0
 
@@ -127,7 +133,7 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
     except:
         pass
 
-def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None):
+def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None, ignorar_silencio_longo=False, limite_silencio=2.5):
     if not pasta_saida_edl:
         pasta_saida_edl = pasta_saida_video
         
@@ -137,7 +143,7 @@ def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None):
     audio_temp = os.path.join(pasta_saida_video, f"temp_detect_{nome_base}.wav")
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", caminho_video, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_temp])
 
-    fala, dur_total = detectar_silencios(audio_temp)
+    fala, dur_total = detectar_silencios(audio_temp, ignorar_silencio_longo=ignorar_silencio_longo, limite_silencio=limite_silencio)
     if os.path.exists(audio_temp):
         os.remove(audio_temp)
 
@@ -161,7 +167,19 @@ def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None):
     return video_cortado
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2:
-        processar(sys.argv[1], sys.argv[2])
-    elif len(sys.argv) > 1:
-        processar(sys.argv[1], os.path.dirname(sys.argv[1]))
+    limite = 2.5
+    ignorar = "--ignorar-4s" in sys.argv or "--limite" in sys.argv
+    
+    if "--limite" in sys.argv:
+        idx = sys.argv.index("--limite")
+        try:
+            limite = float(sys.argv[idx + 1])
+            ignorar = True
+        except:
+            limite = 2.5
+
+    args = [a for i, a in enumerate(sys.argv[1:]) if a not in ["--ignorar-4s", "--limite"] and (i == 0 or sys.argv[i] != "--limite")]
+    if len(args) > 1:
+        processar(args[0], args[1], ignorar_silencio_longo=ignorar, limite_silencio=limite)
+    elif len(args) == 1:
+        processar(args[0], os.path.dirname(args[0]), ignorar_silencio_longo=ignorar, limite_silencio=limite)

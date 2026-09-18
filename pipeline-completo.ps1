@@ -245,7 +245,8 @@ $btnIniciar.ForeColor = [System.Drawing.Color]::White
 $btnIniciar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $btnIniciar.Add_Click({
     # Captura a seleção ANTES de fechar a janela
-    $global:videosSelecionados = @()
+    $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
+      $global:videosSelecionados = @()
     foreach ($item in $chkListVideos.CheckedItems) { $global:videosSelecionados += $global:mapaVideos[$item.ToString()] }
     
     # Fecha o formulário manualmente com sucesso
@@ -288,6 +289,34 @@ $btnCancelar.Text = "Cancelar"
 $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $btnCancelar.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
 $form.Controls.Add($btnCancelar)
+
+    # --- CONTROLE DINÂMICO DE PAUSA ---
+    $lblPausa = New-Object System.Windows.Forms.Label
+    $lblPausa.Text = "Preservar pausas >="
+    $lblPausa.Location = New-Object System.Drawing.Point(15, 505)
+    $lblPausa.AutoSize = $true
+    $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+
+    $trackPausa = New-Object System.Windows.Forms.TrackBar
+    $trackPausa.Location = New-Object System.Drawing.Point(125, 498)
+    $trackPausa.Size = New-Object System.Drawing.Size(120, 30)
+    $trackPausa.Minimum = 15   # 1.5s
+    $trackPausa.Maximum = 50   # 5.0s
+    $trackPausa.Value = 25     # Padrão: 2.5s
+    $trackPausa.TickFrequency = 5
+
+    $lblPausaVal = New-Object System.Windows.Forms.Label
+    $lblPausaVal.Text = "2.5s"
+    $lblPausaVal.Location = New-Object System.Drawing.Point(250, 505)
+    $lblPausaVal.AutoSize = $true
+    $lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+
+    $trackPausa.Add_ValueChanged({
+        $segundos = ($trackPausa.Value / 10.0).ToString("0.0")
+        $lblPausaVal.Text = "${segundos}s"
+    })
+
+    $form.Controls.AddRange(@($lblPausa, $trackPausa, $lblPausaVal))
 
     # --- CONTROLE DE TRANSPARÊNCIA ---
     $lblOpacidade = New-Object System.Windows.Forms.Label
@@ -408,7 +437,7 @@ foreach ($video in $videos) {
     if ($fazerAutoCut) {
         $videoDinamico = Join-Path $dirSaida "${nome}_DINAMICO.mp4"
         if (-not (Test-Path $videoDinamico)) {
-            & python (Join-Path $raiz "autocut_engine.py") $video.FullName $dirSaida
+            & python (Join-Path $raiz "autocut_engine.py") $video.FullName $dirSaida "--limite" $global:limitePausa
             if ($fazerEDL) {
                 Get-ChildItem -Path $dirSaida -Filter "${nome}_timeline_cortes.edl" | Move-Item -Destination $pastas["7"] -Force -ErrorAction SilentlyContinue
             }
