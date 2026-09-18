@@ -5,7 +5,20 @@
 )
 
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+
+# --- SUPORTE A DWM DARK & BLUR ACRÍLICO ---
+if (-not ([System.Management.Automation.PSTypeName]'Win32Dwm').Type) {
+    Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class Win32Dwm {
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    }
+"@
+}
 
 $raiz = "C:\Users\ferna\Desktop\LUIS-MEDIA-TOOLS"
 $configFile = Join-Path $raiz "config_presets.json"
@@ -43,7 +56,14 @@ $destinoSugerido = if ($PastaDestino -ne "") { $PastaDestino } else { Join-Path 
 # =========================================================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "LUIS-MEDIA-TOOLS — Production Studio Hub"
-$form.Size = New-Object System.Drawing.Size(620, 640)
+
+
+
+
+
+$form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
+$form.ClientSize = New-Object System.Drawing.Size(620, 620)
+$form.MinimumSize = New-Object System.Drawing.Size(620, 620)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -113,7 +133,8 @@ $lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $grpPreset.Controls.Add($lblPresetDesc)
 
 $tabControl = New-Object System.Windows.Forms.TabControl
-$tabControl.Location = New-Object System.Drawing.Point(20, 215); $tabControl.Size = New-Object System.Drawing.Size(565, 290)
+$tabControl.Location = New-Object System.Drawing.Point(20, 215); 
+$tabControl.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left; $tabControl.Size = New-Object System.Drawing.Size(580, 215)
 $tabControl.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($tabControl)
 
@@ -129,7 +150,8 @@ $lblInfoSel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing
 $tabSelecao.Controls.Add($lblInfoSel)
 
 $chkListVideos = New-Object System.Windows.Forms.CheckedListBox
-$chkListVideos.Location = New-Object System.Drawing.Point(15, 40); $chkListVideos.Size = New-Object System.Drawing.Size(530, 150)
+$chkListVideos.Location = New-Object System.Drawing.Point(15, 40); 
+$chkListVideos.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left; $chkListVideos.Size = New-Object System.Drawing.Size(545, 118);
 $chkListVideos.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $chkListVideos.CheckOnClick = $true
 
@@ -237,7 +259,7 @@ $cmbPresets.Add_SelectedIndexChanged({
 })
 
 $btnIniciar = New-Object System.Windows.Forms.Button
-$btnIniciar.Location = New-Object System.Drawing.Point(345, 525); $btnIniciar.Size = New-Object System.Drawing.Size(240, 48)
+$btnIniciar.Location = New-Object System.Drawing.Point(350, 508); $btnIniciar.Size = New-Object System.Drawing.Size(235, 52)
 $btnIniciar.Text = "▶ INICIAR PROCESSAMENTO"
 $btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
@@ -284,50 +306,84 @@ $tabControl.AllowDrop = $true; $tabControl.Add_DragEnter($acaoDragEnter); $tabCo
 # ===============================================
 
 $btnCancelar = New-Object System.Windows.Forms.Button
-$btnCancelar.Location = New-Object System.Drawing.Point(220, 525); $btnCancelar.Size = New-Object System.Drawing.Size(115, 48)
+$btnCancelar.Location = New-Object System.Drawing.Point(245, 508); $btnCancelar.Size = New-Object System.Drawing.Size(95, 52)
 $btnCancelar.Text = "Cancelar"
 $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $btnCancelar.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
 $form.Controls.Add($btnCancelar)
 
-    # --- CONTROLE DINÂMICO DE PAUSA ---
+    # --- RODAPÉ PROFISSIONAL REORGANIZADO ---
+    # Linha 1: Botão Vidro / Blur (Y = 460)
+    $global:blurAtivo = $true
+    $btnBlur = New-Object System.Windows.Forms.Button
+    $btnBlur.Location = New-Object System.Drawing.Point(18, 460)
+    $btnBlur.Size = New-Object System.Drawing.Size(220, 30)
+    $btnBlur.Text = "✨ Efeito Vidro: ATIVADO"
+    $btnBlur.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $btnBlur.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnBlur.FlatAppearance.BorderSize = 1
+    $btnBlur.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(99, 102, 241)
+    $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58)
+    $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252)
+    $btnBlur.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+    $btnBlur.Add_Click({
+        $global:blurAtivo = -not $global:blurAtivo
+        if ($global:blurAtivo) {
+            $modo = 3
+            $form.Opacity = ($trackOpacidade.Value / 100.0)
+            $btnBlur.Text = "✨ Efeito Vidro: ATIVADO"
+            $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252)
+            $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58)
+        } else {
+            $modo = 1
+            $form.Opacity = 1.0
+            $btnBlur.Text = "⚪ Efeito Vidro: DESATIVADO"
+            $btnBlur.ForeColor = [System.Drawing.Color]::Gray
+            $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(26, 27, 38)
+        }
+        [Win32Dwm]::DwmSetWindowAttribute($form.Handle, 38, [ref]$modo, 4)
+    })
+
+    # Linha 2: Slider de Pausa (Y = 502)
     $lblPausa = New-Object System.Windows.Forms.Label
-    $lblPausa.Text = "Preservar pausas >="
-    $lblPausa.Location = New-Object System.Drawing.Point(15, 505)
+    $lblPausa.Text = "Pausas:"
+    $lblPausa.Location = New-Object System.Drawing.Point(18, 506)
     $lblPausa.AutoSize = $true
-    $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lblPausa.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55); $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
 
     $trackPausa = New-Object System.Windows.Forms.TrackBar
-    $trackPausa.Location = New-Object System.Drawing.Point(125, 498)
-    $trackPausa.Size = New-Object System.Drawing.Size(120, 30)
-    $trackPausa.Minimum = 15   # 1.5s
-    $trackPausa.Maximum = 50   # 5.0s
-    $trackPausa.Value = 25     # Padrão: 2.5s
+    $trackPausa.Location = New-Object System.Drawing.Point(75, 500)
+    $trackPausa.Size = New-Object System.Drawing.Size(115, 30)
+    $trackPausa.Minimum = 15
+    $trackPausa.Maximum = 50
+    $trackPausa.Value = 25
     $trackPausa.TickFrequency = 5
 
     $lblPausaVal = New-Object System.Windows.Forms.Label
     $lblPausaVal.Text = "2.5s"
-    $lblPausaVal.Location = New-Object System.Drawing.Point(250, 505)
+    $lblPausaVal.Location = New-Object System.Drawing.Point(195, 506)
     $lblPausaVal.AutoSize = $true
-    $lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    $lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lblPausaVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
 
     $trackPausa.Add_ValueChanged({
         $segundos = ($trackPausa.Value / 10.0).ToString("0.0")
         $lblPausaVal.Text = "${segundos}s"
     })
 
-    $form.Controls.AddRange(@($lblPausa, $trackPausa, $lblPausaVal))
-
-    # --- CONTROLE DE TRANSPARÊNCIA ---
+    # Linha 3: Slider de Opacidade (Y = 544)
     $lblOpacidade = New-Object System.Windows.Forms.Label
     $lblOpacidade.Text = "Opacidade:"
-    $lblOpacidade.Location = New-Object System.Drawing.Point(15, 538)
+    $lblOpacidade.Location = New-Object System.Drawing.Point(18, 548)
     $lblOpacidade.AutoSize = $true
-    $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lblOpacidade.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55); $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
 
     $trackOpacidade = New-Object System.Windows.Forms.TrackBar
-    $trackOpacidade.Location = New-Object System.Drawing.Point(75, 532)
-    $trackOpacidade.Size = New-Object System.Drawing.Size(100, 30)
+    $trackOpacidade.Location = New-Object System.Drawing.Point(85, 542)
+    $trackOpacidade.Size = New-Object System.Drawing.Size(105, 30)
     $trackOpacidade.Minimum = 40
     $trackOpacidade.Maximum = 100
     $trackOpacidade.Value = 95
@@ -335,9 +391,10 @@ $form.Controls.Add($btnCancelar)
 
     $lblOpacidadeVal = New-Object System.Windows.Forms.Label
     $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
-    $lblOpacidadeVal.Location = New-Object System.Drawing.Point(180, 538)
+    $lblOpacidadeVal.Location = New-Object System.Drawing.Point(195, 548)
     $lblOpacidadeVal.AutoSize = $true
-    $lblOpacidadeVal.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    $lblOpacidadeVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lblOpacidadeVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
 
     $trackOpacidade.Add_ValueChanged({
         $form.Opacity = $trackOpacidade.Value / 100.0
@@ -345,9 +402,21 @@ $form.Controls.Add($btnCancelar)
     })
     $form.Opacity = $trackOpacidade.Value / 100.0
 
-    $form.Controls.Add($lblOpacidade)
-    $form.Controls.Add($trackOpacidade)
-    $form.Controls.Add($lblOpacidadeVal)
+    # Botões de Ação à Direita (Y = 498)
+    $btnCancelar.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
+    $btnCancelar.Location = New-Object System.Drawing.Point(250, 498)
+    $btnCancelar.Size = New-Object System.Drawing.Size(95, 74)
+
+    $btnIniciar.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
+    $btnIniciar.Location = New-Object System.Drawing.Point(355, 498)
+    $btnIniciar.Size = New-Object System.Drawing.Size(240, 74)
+
+    $form.Controls.AddRange(@($btnBlur, $lblPausa, $trackPausa, $lblPausaVal, $lblOpacidade, $trackOpacidade, $lblOpacidadeVal))
+
+    # Força as dimensões reais assim que a janela é exibida no ecrã
+    $form.Add_Shown({
+        $this.ClientSize = New-Object System.Drawing.Size(620, 620)
+    })
     # ---------------------------------
     $form.AcceptButton = $btnIniciar
 $form.CancelButton = $btnCancelar
