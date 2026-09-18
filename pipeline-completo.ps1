@@ -289,7 +289,38 @@ $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $btnCancelar.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
 $form.Controls.Add($btnCancelar)
 
-$form.AcceptButton = $btnIniciar
+    # --- CONTROLE DE TRANSPARÊNCIA ---
+    $lblOpacidade = New-Object System.Windows.Forms.Label
+    $lblOpacidade.Text = "Opacidade:"
+    $lblOpacidade.Location = New-Object System.Drawing.Point(15, 538)
+    $lblOpacidade.AutoSize = $true
+    $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+
+    $trackOpacidade = New-Object System.Windows.Forms.TrackBar
+    $trackOpacidade.Location = New-Object System.Drawing.Point(75, 532)
+    $trackOpacidade.Size = New-Object System.Drawing.Size(100, 30)
+    $trackOpacidade.Minimum = 40
+    $trackOpacidade.Maximum = 100
+    $trackOpacidade.Value = 95
+    $trackOpacidade.TickFrequency = 20
+
+    $lblOpacidadeVal = New-Object System.Windows.Forms.Label
+    $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
+    $lblOpacidadeVal.Location = New-Object System.Drawing.Point(180, 538)
+    $lblOpacidadeVal.AutoSize = $true
+    $lblOpacidadeVal.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+
+    $trackOpacidade.Add_ValueChanged({
+        $form.Opacity = $trackOpacidade.Value / 100.0
+        $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
+    })
+    $form.Opacity = $trackOpacidade.Value / 100.0
+
+    $form.Controls.Add($lblOpacidade)
+    $form.Controls.Add($trackOpacidade)
+    $form.Controls.Add($lblOpacidadeVal)
+    # ---------------------------------
+    $form.AcceptButton = $btnIniciar
 $form.CancelButton = $btnCancelar
 
 if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
