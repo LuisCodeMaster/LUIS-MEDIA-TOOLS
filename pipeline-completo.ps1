@@ -355,6 +355,27 @@ $chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + Co
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox; $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 112); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
 $chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"; $chkHardsubHoriz.Checked = $cfg.Hardsub; $tabVideo.Controls.Add($chkHardsubHoriz)
 
+$lblEncoder = New-Object System.Windows.Forms.Label
+$lblEncoder.Text = "Aceleração / Hardware:"
+$lblEncoder.Location = New-Object System.Drawing.Point(40, 146)
+$lblEncoder.Size = New-Object System.Drawing.Size(140, 20)
+$lblEncoder.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$tabVideo.Controls.Add($lblEncoder)
+
+$cmbEncoder = New-Object System.Windows.Forms.ComboBox
+$cmbEncoder.Location = New-Object System.Drawing.Point(185, 143)
+$cmbEncoder.Size = New-Object System.Drawing.Size(335, 24)
+$cmbEncoder.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+$cmbEncoder.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$cmbEncoder.Items.AddRange(@(
+    "⚡ GPU AMD (AMF - Radeon Vega / Ryzen 5600GT)",
+    "🖥️ Processador CPU (x264 - Compatibilidade Total)",
+    "🟢 GPU NVIDIA (NVENC - GeForce)",
+    "🔷 GPU Intel (QSV - QuickSync)"
+))
+$cmbEncoder.SelectedIndex = 0
+$tabVideo.Controls.Add($cmbEncoder)
+
 $tabDidatico = New-Object System.Windows.Forms.TabPage; $tabDidatico.Text = "Material & IA"
 $tabControl.TabPages.Add($tabDidatico)
 
@@ -515,6 +536,7 @@ $btnIniciar.Add_MouseEnter({ $btnIniciar.BackColor = [System.Drawing.Color]::Fro
 $btnIniciar.Add_MouseLeave({ $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129) })
 
 $btnIniciar.Add_Click({
+    $global:encoderEscolhido = $cmbEncoder.SelectedIndex
     $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
     $global:videosSelecionados = @()
     foreach ($item in $chkListVideos.CheckedItems) {
@@ -710,13 +732,36 @@ except Exception as e:
     Start-Sleep -Seconds 1
 
     # HARD SUB USANDO O ARQUIVO ASS FLUIDO (Com animação de fade suave e margem elegante)
-    if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
+    
+# Define os parâmetros do encoder conforme a escolha do usuário na interface
+$argsEncoder = switch ($global:encoderEscolhido) {
+    0 { @("-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p") }
+    1 { @("-c:v", "libx264", "-preset", "faster", "-crf", "20", "-pix_fmt", "yuv420p") }
+    2 { @("-c:v", "h264_nvenc", "-preset", "p4", "-cq", "22", "-pix_fmt", "yuv420p") }
+    3 { @("-c:v", "h264_qsv", "-global_quality", "22", "-pix_fmt", "yuv420p") }
+    Default { @("-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p") }
+}
+
+        if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
             Write-Host "    Renderizando versao com Legenda Fluida para Aulas..." -ForegroundColor Magenta
+            
+            # Formata caminho para o FFmpeg escapando apenas os dois-pontos do drive (sem barra invertida no final)
             $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
             
-            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles=\'$assFormatado\'" -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
+            # Executa com o encoder selecionado na interface + copia de audio
+            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles='$assFormatado'" @argsEncoder -c:a copy $videoLegendado
+            
+            # Se o encoder de GPU nao gerar o arquivo, aplica fallback automatico via CPU
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $videoLegendado)) {
+                Write-Host "    [AVISO] Recorrendo ao encoder CPU (libx264)..." -ForegroundColor Yellow
+                & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles='$assFormatado'" -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
+            }
+
+            if (Test-Path $videoLegendado) {
+                Write-Host "    [OK] Video legendado gerado com sucesso!" -ForegroundColor Green
+            }
         }
     }
 

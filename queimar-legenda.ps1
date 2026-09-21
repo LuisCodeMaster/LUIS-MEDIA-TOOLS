@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$false)]
     [string]$ArquivoVideo
 )
@@ -57,7 +57,7 @@ function Queimar-LegendaArquivo {
         $filtroV = "subtitles='$legendaFormatada':force_style='FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,MarginV=30'"
     }
 
-    & ffmpeg -y -i "$VideoFull" -vf "$filtroV" -c:a copy -c:v libx264 -crf 20 -preset fast "$VideoFinal" -loglevel error
+    & ffmpeg -y -i "$VideoFull" -vf "$filtroV" -c:a copy -c:v h264_amf -quality balanced -rc cqp -qp_i 20 -qp_p 22 -pix_fmt yuv420p "$VideoFinal" -loglevel error
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERRO ao gravar legenda em: $NomeVideo" -ForegroundColor Red
