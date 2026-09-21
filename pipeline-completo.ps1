@@ -5,7 +5,6 @@
 )
 
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- SUPORTE A DWM DARK & BLUR ACRÍLICO ---
@@ -14,53 +13,191 @@ if (-not ([System.Management.Automation.PSTypeName]'Win32Dwm').Type) {
     using System;
     using System.Runtime.InteropServices;
     public class Win32Dwm {
-        [DllImport("dwmapi.dll")]
+        [DllImport("dwmapi.dll", SetLastError = false)]
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     }
 "@
+}
+
+function Global:Aplicar-TemaModerno {
+    $darkBg = [System.Drawing.Color]::FromArgb(18, 19, 28);
+    $cardBg = [System.Drawing.Color]::FromArgb(28, 30, 42);
+    $textLight = [System.Drawing.Color]::FromArgb(240, 243, 248);
+    $accent = [System.Drawing.Color]::FromArgb(129, 140, 248);
+
+    $form.BackColor = $darkBg;
+    $form.ForeColor = $textLight;
+
+    try {
+        if ($form.IsHandleCreated) {
+            [int]$dark = 1;
+            [int]$acrylic = 3;
+            [void][Win32Dwm]::DwmSetWindowAttribute($form.Handle, 20, [ref]$dark, 4);
+            [void][Win32Dwm]::DwmSetWindowAttribute($form.Handle, 38, [ref]$acrylic, 4);
+        }
+    } catch { };
+
+    if ($trackOpacidade) {
+        $form.Opacity = ($trackOpacidade.Value / 100.0);
+    };
+
+    $estilizar = {
+        param($ctrl);
+        if ($ctrl -is [System.Windows.Forms.TabPage]) {
+            $ctrl.UseVisualStyleBackColor = $false;
+            $ctrl.BackColor = $darkBg;
+            $ctrl.ForeColor = $textLight;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.GroupBox]) {
+            $ctrl.BackColor = $darkBg;
+            $ctrl.ForeColor = $accent;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.Label]) {
+            if ($ctrl -eq $lblPausa -or $ctrl -eq $lblOpacidade) {
+                $ctrl.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 240);
+            } elseif ($ctrl -ne $lblPausaVal -and $ctrl -ne $lblOpacidadeVal) {
+                $ctrl.ForeColor = $textLight;
+            }
+        }
+        elseif ($ctrl -is [System.Windows.Forms.TextBox] -or $ctrl -is [System.Windows.Forms.CheckedListBox] -or $ctrl -is [System.Windows.Forms.ListBox] -or $ctrl -is [System.Windows.Forms.ComboBox]) {
+            $ctrl.BackColor = $cardBg;
+            $ctrl.ForeColor = $textLight;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.Button] -and $ctrl -ne $btnIniciar -and $ctrl -ne $btnBlur) {
+            $ctrl.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat;
+            $ctrl.FlatAppearance.BorderSize = 1;
+            $ctrl.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(75, 85, 110);
+            $ctrl.BackColor = $cardBg;
+            $ctrl.ForeColor = $textLight;
+        }
+        if ($ctrl.Controls) {
+            foreach ($filho in ($ctrl.Controls)) {
+                & $estilizar $filho;
+            }
+        }
+    };
+    & $estilizar $form;
+
+    if ($btnBlur) {
+        $btnBlur.Text = "✨ Tema: DARK + BLUR";
+        $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58);
+        $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252);
+    };
+}
+
+function Global:Aplicar-TemaClassico {
+    $form.BackColor = [System.Drawing.SystemColors]::Control;
+    $form.ForeColor = [System.Drawing.SystemColors]::ControlText;
+
+    try {
+        if ($form.IsHandleCreated) {
+            [int]$dark = 0;
+            [int]$modo = 1;
+            [void][Win32Dwm]::DwmSetWindowAttribute($form.Handle, 20, [ref]$dark, 4);
+            [void][Win32Dwm]::DwmSetWindowAttribute($form.Handle, 38, [ref]$modo, 4);
+        }
+    } catch { };
+
+    $form.Opacity = 1.0;
+
+    $restaurar = {
+        param($ctrl);
+        if ($ctrl -is [System.Windows.Forms.TabPage]) {
+            $ctrl.BackColor = [System.Drawing.SystemColors]::Window;
+            $ctrl.ForeColor = [System.Drawing.SystemColors]::ControlText;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.GroupBox]) {
+            $ctrl.BackColor = [System.Drawing.SystemColors]::Control;
+            $ctrl.ForeColor = [System.Drawing.SystemColors]::ControlText;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.Label]) {
+            if ($ctrl -eq $lblPausa -or $ctrl -eq $lblOpacidade) {
+                $ctrl.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55);
+            } elseif ($ctrl -ne $lblPausaVal -and $ctrl -ne $lblOpacidadeVal) {
+                $ctrl.ForeColor = [System.Drawing.SystemColors]::ControlText;
+            }
+        }
+        elseif ($ctrl -is [System.Windows.Forms.TextBox] -or $ctrl -is [System.Windows.Forms.CheckedListBox] -or $ctrl -is [System.Windows.Forms.ListBox] -or $ctrl -is [System.Windows.Forms.ComboBox]) {
+            $ctrl.BackColor = [System.Drawing.SystemColors]::Window;
+            $ctrl.ForeColor = [System.Drawing.SystemColors]::WindowText;
+        }
+        elseif ($ctrl -is [System.Windows.Forms.Button] -and $ctrl -ne $btnIniciar -and $ctrl -ne $btnBlur) {
+            $ctrl.FlatStyle = [System.Windows.Forms.FlatStyle]::Standard;
+            $ctrl.BackColor = [System.Drawing.SystemColors]::ControlLight;
+            $ctrl.ForeColor = [System.Drawing.SystemColors]::ControlText;
+        }
+        if ($ctrl.Controls) {
+            foreach ($filho in ($ctrl.Controls)) {
+                & $restaurar $filho;
+            }
+        }
+    };
+    & $restaurar $form;
+
+    if ($btnBlur) {
+        $btnBlur.Text = "⚪ Tema: CLÁSSICO";
+        $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(235, 235, 240);
+        $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(50, 50, 60);
+    };
+}
+
+
+function Global:Obter-DuracaoVideo([string]$caminhoArquivo) {
+    if (-not (Test-Path -LiteralPath $caminhoArquivo)) { return "" }
+    try {
+        $raw = & ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$caminhoArquivo" 2>$null
+        if ($raw) {
+            $secVal = 0.0
+            $cultura = [System.Globalization.CultureInfo]::InvariantCulture
+            if ([double]::TryParse($raw.Trim(), [System.Globalization.NumberStyles]::Any, $cultura, [ref]$secVal)) {
+                $ts = [TimeSpan]::FromSeconds($secVal)
+                if ($ts.Hours -gt 0) {
+                    return ("{0}h {1:D2}m {2:D2}s" -f $ts.Hours, $ts.Minutes, $ts.Seconds)
+                } else {
+                    return ("{0}m {1:D2}s" -f $ts.Minutes, $ts.Seconds)
+                }
+            }
+        }
+    } catch { }
+    return ""
 }
 
 $raiz = "C:\Users\ferna\Desktop\LUIS-MEDIA-TOOLS"
 $configFile = Join-Path $raiz "config_presets.json"
 
 $cfg = @{
-    PresetIndex = 0; AutoCut = $true; EDL = $true; Hardsub = $true
-    Slides = $true; PDF = $true; IA = $true; Resumo = $true; Quiz = $true; Cortes = $true; QtdCortes = 3
+    PresetIndex = 0; AutoCut = $true; EDL = $true; Hardsub =$true
+    Slides = $true; PDF =$true; IA = $true; Resumo =$true; Quiz = $true; Cortes =$true; QtdCortes = 3
 }
 
 if (Test-Path $configFile) {
     try {
         $jsonContent = Get-Content $configFile -Raw | ConvertFrom-Json
-        if ($jsonContent) { foreach ($key in $jsonContent.psobject.properties.name) { $cfg[$key] = $jsonContent.$key } }
-    } catch {}
+        if ($jsonContent) {
+            foreach ($key in $jsonContent.psobject.properties.name) {
+                $cfg[$key] = $jsonContent.$key
+            }
+        }
+    } catch { }
 }
 
 if ($CaminhoPasta -ne "") {
-    $itemAlvo = Get-Item -LiteralPath $CaminhoPasta
-    if ($itemAlvo.PSIsContainer) { $dirEntrada = $itemAlvo.FullName; $nomeAula = $itemAlvo.Name }
-    else { $dirEntrada = $itemAlvo.DirectoryName; $nomeAula = (Get-Item $dirEntrada).Name }
+    $itemAlvo = Get-Item -LiteralPath$CaminhoPasta
+    if ($itemAlvo.PSIsContainer) { $dirEntrada =$itemAlvo.FullName; $nomeAula =$itemAlvo.Name }
+    else { $dirEntrada =$itemAlvo.DirectoryName; $nomeAula = (Get-Item$dirEntrada).Name }
 } else {
     if ($Aula -eq "") { $Aula = "Aula1" }
-    $nomeAula = $Aula; $dirEntrada = Join-Path $raiz "entrada\$nomeAula"
+    $nomeAula =$Aula; $dirEntrada = Join-Path $raiz "entrada\$nomeAula"
 }
 
 if (-not (Test-Path $dirEntrada)) {
-    [System.Windows.Forms.MessageBox]::Show("Pasta de entrada nao encontrada:`n$dirEntrada", "Erro", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    [void][System.Windows.Forms.MessageBox]::Show("Pasta de entrada nao encontrada:`n$dirEntrada", "Erro", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
     exit 1
 }
 
-$destinoSugerido = if ($PastaDestino -ne "") { $PastaDestino } else { Join-Path $raiz "saida\$nomeAula" }
-
-# =========================================================
-# STUDIO HUB GUI
-# =========================================================
+# --- FORMULÁRIO PRINCIPAL ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "LUIS-MEDIA-TOOLS — Production Studio Hub"
-
-
-
-
-
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $form.ClientSize = New-Object System.Drawing.Size(620, 620)
 $form.MinimumSize = New-Object System.Drawing.Size(620, 620)
@@ -68,57 +205,83 @@ $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
-$form.BackColor = [System.Drawing.Color]::FromArgb(248, 250, 252)
+$form.BackColor = [System.Drawing.Color]::FromArgb(18, 19, 28)
 
+# Cabeçalho Superior
 $pnlHeader = New-Object System.Windows.Forms.Panel
-$pnlHeader.Location = New-Object System.Drawing.Point(0, 0); $pnlHeader.Size = New-Object System.Drawing.Size(620, 65)
+$pnlHeader.Location = New-Object System.Drawing.Point(0, 0)
+$pnlHeader.Size = New-Object System.Drawing.Size(620, 65)
 $pnlHeader.BackColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
 $form.Controls.Add($pnlHeader)
 
 $lblTitle = New-Object System.Windows.Forms.Label
-$lblTitle.Location = New-Object System.Drawing.Point(20, 12); $lblTitle.Size = New-Object System.Drawing.Size(560, 24)
+$lblTitle.Location = New-Object System.Drawing.Point(20, 12)
+$lblTitle.Size = New-Object System.Drawing.Size(560, 24)
 $lblTitle.Text = "ESTEIRA DE PÓS-PRODUÇÃO INTELIGENTE"
 $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $lblTitle.ForeColor = [System.Drawing.Color]::White
 $pnlHeader.Controls.Add($lblTitle)
 
 $lblSubtitle = New-Object System.Windows.Forms.Label
-$lblSubtitle.Location = New-Object System.Drawing.Point(22, 38); $lblSubtitle.Size = New-Object System.Drawing.Size(560, 18)
+$lblSubtitle.Location = New-Object System.Drawing.Point(22, 38)
+$lblSubtitle.Size = New-Object System.Drawing.Size(560, 18)
 $lblSubtitle.Text = "Projeto: $nomeAula  |  Origem: $dirEntrada"
 $lblSubtitle.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $lblSubtitle.ForeColor = [System.Drawing.Color]::FromArgb(148, 163, 184)
 $pnlHeader.Controls.Add($lblSubtitle)
 
+# Barra de Destino (Inicia Vazia)
 $lblDestino = New-Object System.Windows.Forms.Label
-$lblDestino.Location = New-Object System.Drawing.Point(20, 78); $lblDestino.Size = New-Object System.Drawing.Size(120, 18)
 $lblDestino.Text = "Pasta de Destino:"
+$lblDestino.Location = New-Object System.Drawing.Point(18, 75)
 $lblDestino.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$lblDestino.ForeColor = [System.Drawing.Color]::FromArgb(199, 210, 254)
+$lblDestino.AutoSize = $true
 $form.Controls.Add($lblDestino)
 
 $txtDestino = New-Object System.Windows.Forms.TextBox
-$txtDestino.Location = New-Object System.Drawing.Point(20, 98); $txtDestino.Size = New-Object System.Drawing.Size(465, 23)
-$txtDestino.Text = $destinoSugerido; $txtDestino.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$txtDestino.Location = New-Object System.Drawing.Point(18, 97)
+$txtDestino.Size = New-Object System.Drawing.Size(465, 27)
+$txtDestino.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$txtDestino.BackColor = [System.Drawing.Color]::FromArgb(26, 28, 40)
+$txtDestino.ForeColor = [System.Drawing.Color]::FromArgb(241, 245, 249)
+$txtDestino.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtDestino.Text = ""
 $form.Controls.Add($txtDestino)
 
 $btnBrowse = New-Object System.Windows.Forms.Button
-$btnBrowse.Location = New-Object System.Drawing.Point(495, 96); $btnBrowse.Size = New-Object System.Drawing.Size(90, 27)
 $btnBrowse.Text = "Procurar..."
-$btnBrowse.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$btnBrowse.Location = New-Object System.Drawing.Point(490, 96)
+$btnBrowse.Size = New-Object System.Drawing.Size(105, 28)
+$btnBrowse.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$btnBrowse.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnBrowse.FlatAppearance.BorderSize = 1
+$btnBrowse.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(99, 102, 241)
+$btnBrowse.BackColor = [System.Drawing.Color]::FromArgb(38, 41, 58)
+$btnBrowse.ForeColor = [System.Drawing.Color]::FromArgb(199, 210, 254)
+$btnBrowse.Cursor = [System.Windows.Forms.Cursors]::Hand
 $btnBrowse.Add_Click({
-    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.SelectedPath = $txtDestino.Text
-    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $txtDestino.Text = $dlg.SelectedPath }
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    if (-not [string]::IsNullOrWhiteSpace($txtDestino.Text) -and (Test-Path -LiteralPath $txtDestino.Text)) {
+        $dialog.SelectedPath = $txtDestino.Text
+    }
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtDestino.Text = $dialog.SelectedPath
+    }
 })
 $form.Controls.Add($btnBrowse)
 
+# Grupo de Presets
 $grpPreset = New-Object System.Windows.Forms.GroupBox
-$grpPreset.Location = New-Object System.Drawing.Point(20, 135); $grpPreset.Size = New-Object System.Drawing.Size(565, 68)
+$grpPreset.Location = New-Object System.Drawing.Point(20, 135)
+$grpPreset.Size = New-Object System.Drawing.Size(575, 68)
 $grpPreset.Text = " 1. Modo de Operação (Preset Guiado) "
 $grpPreset.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
 $form.Controls.Add($grpPreset)
 
 $cmbPresets = New-Object System.Windows.Forms.ComboBox
-$cmbPresets.Location = New-Object System.Drawing.Point(18, 26); $cmbPresets.Size = New-Object System.Drawing.Size(320, 24)
+$cmbPresets.Location = New-Object System.Drawing.Point(18, 26)
+$cmbPresets.Size = New-Object System.Drawing.Size(320, 24)
 $cmbPresets.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
 $cmbPresets.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $cmbPresets.Items.AddRange(@("🎓 Curso Completo (Tudo Ativado)", "📱 Foco em Redes (Cortes 9:16 + Hardsub)", "🎬 Pré-Edição NLE (Apenas Auto-Cut + Timeline EDL)", "🛠 Personalizado"))
@@ -126,129 +289,98 @@ $cmbPresets.SelectedIndex = $cfg.PresetIndex
 $grpPreset.Controls.Add($cmbPresets)
 
 $lblPresetDesc = New-Object System.Windows.Forms.Label
-$lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(200, 32)
+$lblPresetDesc.Location = New-Object System.Drawing.Point(350, 25); $lblPresetDesc.Size = New-Object System.Drawing.Size(210, 32)
 $lblPresetDesc.Text = "Voz Broadcast + Legenda Fluida para Aulas."
 $lblPresetDesc.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-$lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
+$lblPresetDesc.ForeColor = [System.Drawing.Color]::FromArgb(148, 163, 184)
 $grpPreset.Controls.Add($lblPresetDesc)
 
+# Abas de Configuração
 $tabControl = New-Object System.Windows.Forms.TabControl
-$tabControl.Location = New-Object System.Drawing.Point(20, 215); 
-$tabControl.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left; $tabControl.Size = New-Object System.Drawing.Size(580, 215)
+$tabControl.Location = New-Object System.Drawing.Point(20, 215)
+$tabControl.Size = New-Object System.Drawing.Size(575, 235)
 $tabControl.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $form.Controls.Add($tabControl)
 
-$tabSelecao = New-Object System.Windows.Forms.TabPage
-$tabSelecao.Text = "📁 Selecionar Vídeos"
-$tabSelecao.BackColor = [System.Drawing.Color]::White
+$tabSelecao = New-Object System.Windows.Forms.TabPage; $tabSelecao.Text = "📁 Selecionar Vídeos"
 $tabControl.TabPages.Add($tabSelecao)
 
 $lblInfoSel = New-Object System.Windows.Forms.Label
 $lblInfoSel.Text = "Selecione os vídeos que deseja tratar nesta execução:"
-$lblInfoSel.Location = New-Object System.Drawing.Point(15, 15); $lblInfoSel.Size = New-Object System.Drawing.Size(400, 20)
+$lblInfoSel.Location = New-Object System.Drawing.Point(15, 12); $lblInfoSel.Size = New-Object System.Drawing.Size(400, 20)
 $lblInfoSel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $tabSelecao.Controls.Add($lblInfoSel)
 
 $chkListVideos = New-Object System.Windows.Forms.CheckedListBox
-$chkListVideos.Location = New-Object System.Drawing.Point(15, 40); 
-$chkListVideos.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left; $chkListVideos.Size = New-Object System.Drawing.Size(545, 118);
+$chkListVideos.Location = New-Object System.Drawing.Point(15, 36)
+$chkListVideos.Size = New-Object System.Drawing.Size(540, 130)
 $chkListVideos.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $chkListVideos.CheckOnClick = $true
 
-# Carrega os vídeos disponíveis na pasta
-$arquivosDisco = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
 $global:mapaVideos = @{}
-foreach ($arq in $arquivosDisco) { $global:mapaVideos[$arq.Name] = $arq.FullName; [void]$chkListVideos.Items.Add($arq.Name, $false) }
+if (Test-Path $dirEntrada) {
+    $arquivosDisco = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
+    foreach ($arq in $arquivosDisco) {
+        $dur = Obter-DuracaoVideo $arq.FullName
+        $rotulo = if ($dur) { "$($arq.Name)  [$dur]" } else { $arq.Name }
+        $global:mapaVideos[$rotulo] = $arq.FullName
+        [void]$chkListVideos.Items.Add($rotulo, $true)
+    }
+}
 $tabSelecao.Controls.Add($chkListVideos)
 
 $btnTodos = New-Object System.Windows.Forms.Button
-$btnTodos.Text = "Marcar Todos"; $btnTodos.Location = New-Object System.Drawing.Point(15, 200); $btnTodos.Size = New-Object System.Drawing.Size(120, 26)
+$btnTodos.Text = "Marcar Todos"; $btnTodos.Location = New-Object System.Drawing.Point(15, 172); $btnTodos.Size = New-Object System.Drawing.Size(120, 26)
 $btnTodos.Add_Click({ for ($i = 0; $i -lt $chkListVideos.Items.Count; $i++) { $chkListVideos.SetItemChecked($i, $true) } })
 $tabSelecao.Controls.Add($btnTodos)
 
 $btnNenhum = New-Object System.Windows.Forms.Button
-$btnNenhum.Text = "Desmarcar Todos"; $btnNenhum.Location = New-Object System.Drawing.Point(145, 200); $btnNenhum.Size = New-Object System.Drawing.Size(130, 26)
+$btnNenhum.Text = "Desmarcar Todos"; $btnNenhum.Location = New-Object System.Drawing.Point(145, 172); $btnNenhum.Size = New-Object System.Drawing.Size(130, 26)
 $btnNenhum.Add_Click({ for ($i = 0; $i -lt $chkListVideos.Items.Count; $i++) { $chkListVideos.SetItemChecked($i, $false) } })
 $tabSelecao.Controls.Add($btnNenhum)
 
-$tabVideo = New-Object System.Windows.Forms.TabPage
-$tabVideo.Text = "Corte & Voz Pro"
-$tabVideo.BackColor = [System.Drawing.Color]::White
+$tabVideo = New-Object System.Windows.Forms.TabPage; $tabVideo.Text = "Corte & Voz Pro"
 $tabControl.TabPages.Add($tabVideo)
 
-$chkAutoCut = New-Object System.Windows.Forms.CheckBox
-$chkAutoCut.Location = New-Object System.Drawing.Point(20, 18); $chkAutoCut.Size = New-Object System.Drawing.Size(510, 25)
-$chkAutoCut.Text = "Ativar Auto-Cut Dinâmico (Fatiar pausas)"
-$chkAutoCut.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$chkAutoCut.Checked = $cfg.AutoCut
-$tabVideo.Controls.Add($chkAutoCut)
+$chkAutoCut = New-Object System.Windows.Forms.CheckBox; $chkAutoCut.Location = New-Object System.Drawing.Point(20, 18); $chkAutoCut.Size = New-Object System.Drawing.Size(510, 25)
+$chkAutoCut.Text = "Ativar Auto-Cut Dinâmico (Fatiar pausas)"; $chkAutoCut.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkAutoCut.Checked = $cfg.AutoCut; $tabVideo.Controls.Add($chkAutoCut)
 
-$chkEDL = New-Object System.Windows.Forms.CheckBox
-$chkEDL.Location = New-Object System.Drawing.Point(40, 55); $chkEDL.Size = New-Object System.Drawing.Size(480, 24)
-$chkEDL.Text = "Exportar Timeline EDL (DaVinci Resolve / Premiere)"
-$chkEDL.Checked = $cfg.EDL
-$tabVideo.Controls.Add($chkEDL)
+$chkEDL = New-Object System.Windows.Forms.CheckBox; $chkEDL.Location = New-Object System.Drawing.Point(40, 52); $chkEDL.Size = New-Object System.Drawing.Size(480, 24)
+$chkEDL.Text = "Exportar Timeline EDL (DaVinci Resolve / Premiere)"; $chkEDL.Checked = $cfg.EDL; $tabVideo.Controls.Add($chkEDL)
 
-$chkAudioBroadcast = New-Object System.Windows.Forms.CheckBox
-$chkAudioBroadcast.Location = New-Object System.Drawing.Point(40, 85); $chkAudioBroadcast.Size = New-Object System.Drawing.Size(480, 24)
-$chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + Compressor + R128)"
-$chkAudioBroadcast.Checked = $true
-$tabVideo.Controls.Add($chkAudioBroadcast)
+$chkAudioBroadcast = New-Object System.Windows.Forms.CheckBox; $chkAudioBroadcast.Location = New-Object System.Drawing.Point(40, 82); $chkAudioBroadcast.Size = New-Object System.Drawing.Size(480, 24)
+$chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + Compressor + R128)"; $chkAudioBroadcast.Checked = $true; $tabVideo.Controls.Add($chkAudioBroadcast)
 
-$chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox
-$chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 115); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
-$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"
-$chkHardsubHoriz.Checked = $cfg.Hardsub
-$tabVideo.Controls.Add($chkHardsubHoriz)
+$chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox; $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 112); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
+$chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"; $chkHardsubHoriz.Checked = $cfg.Hardsub; $tabVideo.Controls.Add($chkHardsubHoriz)
 
-$tabDidatico = New-Object System.Windows.Forms.TabPage
-$tabDidatico.Text = "Material & IA"
-$tabDidatico.BackColor = [System.Drawing.Color]::White
+$tabDidatico = New-Object System.Windows.Forms.TabPage; $tabDidatico.Text = "Material & IA"
 $tabControl.TabPages.Add($tabDidatico)
 
-$chkSlides = New-Object System.Windows.Forms.CheckBox
-$chkSlides.Location = New-Object System.Drawing.Point(20, 20); $chkSlides.Size = New-Object System.Drawing.Size(510, 25)
-$chkSlides.Text = "Detecção Inteligente de Slides"
-$chkSlides.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$chkSlides.Checked = $cfg.Slides
-$tabDidatico.Controls.Add($chkSlides)
+$chkSlides = New-Object System.Windows.Forms.CheckBox; $chkSlides.Location = New-Object System.Drawing.Point(20, 18); $chkSlides.Size = New-Object System.Drawing.Size(510, 25)
+$chkSlides.Text = "Detecção Inteligente de Slides"; $chkSlides.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkSlides.Checked = $cfg.Slides; $tabDidatico.Controls.Add($chkSlides)
 
-$chkPDF = New-Object System.Windows.Forms.CheckBox
-$chkPDF.Location = New-Object System.Drawing.Point(40, 50); $chkPDF.Size = New-Object System.Drawing.Size(480, 24)
-$chkPDF.Text = "Compilar Apostila Ilustrada em PDF"
-$chkPDF.Checked = $cfg.PDF
-$tabDidatico.Controls.Add($chkPDF)
+$chkPDF = New-Object System.Windows.Forms.CheckBox; $chkPDF.Location = New-Object System.Drawing.Point(40, 48); $chkPDF.Size = New-Object System.Drawing.Size(480, 24)
+$chkPDF.Text = "Compilar Apostila Ilustrada em PDF"; $chkPDF.Checked = $cfg.PDF; $tabDidatico.Controls.Add($chkPDF)
 
-$chkIA = New-Object System.Windows.Forms.CheckBox
-$chkIA.Location = New-Object System.Drawing.Point(20, 95); $chkIA.Size = New-Object System.Drawing.Size(510, 25)
-$chkIA.Text = "Processamento Cognitivo Local (Llama 3.2)"
-$chkIA.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$chkIA.Checked = $cfg.IA
-$tabDidatico.Controls.Add($chkIA)
+$chkIA = New-Object System.Windows.Forms.CheckBox; $chkIA.Location = New-Object System.Drawing.Point(20, 88); $chkIA.Size = New-Object System.Drawing.Size(510, 25)
+$chkIA.Text = "Processamento Cognitivo Local (Llama 3.2)"; $chkIA.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkIA.Checked = $cfg.IA; $tabDidatico.Controls.Add($chkIA)
 
-$chkResumo = New-Object System.Windows.Forms.CheckBox
-$chkResumo.Location = New-Object System.Drawing.Point(40, 125); $chkResumo.Size = New-Object System.Drawing.Size(480, 24)
-$chkResumo.Text = "Gerar Resumo Executivo Estruturado"
-$chkResumo.Checked = $cfg.Resumo
-$tabDidatico.Controls.Add($chkResumo)
+$chkResumo = New-Object System.Windows.Forms.CheckBox; $chkResumo.Location = New-Object System.Drawing.Point(40, 118); $chkResumo.Size = New-Object System.Drawing.Size(480, 24)
+$chkResumo.Text = "Gerar Resumo Executivo Estruturado"; $chkResumo.Checked = $cfg.Resumo; $tabDidatico.Controls.Add($chkResumo)
 
-$chkQuiz = New-Object System.Windows.Forms.CheckBox
-$chkQuiz.Location = New-Object System.Drawing.Point(40, 155); $chkQuiz.Size = New-Object System.Drawing.Size(480, 24)
-$chkQuiz.Text = "Gerar Quiz Interativo de Fixação"
-$chkQuiz.Checked = $cfg.Quiz
-$tabDidatico.Controls.Add($chkQuiz)
+$chkQuiz = New-Object System.Windows.Forms.CheckBox; $chkQuiz.Location = New-Object System.Drawing.Point(40, 148); $chkQuiz.Size = New-Object System.Drawing.Size(480, 24)
+$chkQuiz.Text = "Gerar Quiz Interativo de Fixação"; $chkQuiz.Checked = $cfg.Quiz; $tabDidatico.Controls.Add($chkQuiz)
 
-$tabRedes = New-Object System.Windows.Forms.TabPage
-$tabRedes.Text = "Redes Sociais (9:16)"
-$tabRedes.BackColor = [System.Drawing.Color]::White
+$tabRedes = New-Object System.Windows.Forms.TabPage; $tabRedes.Text = "Redes Sociais (9:16)"
 $tabControl.TabPages.Add($tabRedes)
 
-$chkCortes = New-Object System.Windows.Forms.CheckBox
-$chkCortes.Location = New-Object System.Drawing.Point(20, 20); $chkCortes.Size = New-Object System.Drawing.Size(510, 25)
-$chkCortes.Text = "Ativar Curadoria Viral e Cortes 9:16"
-$chkCortes.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$chkCortes.Checked = $cfg.Cortes
-$tabRedes.Controls.Add($chkCortes)
+$chkCortes = New-Object System.Windows.Forms.CheckBox; $chkCortes.Location = New-Object System.Drawing.Point(20, 20); $chkCortes.Size = New-Object System.Drawing.Size(510, 25)
+$chkCortes.Text = "Ativar Curadoria Viral e Cortes 9:16"; $chkCortes.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkCortes.Checked = $cfg.Cortes; $tabRedes.Controls.Add($chkCortes)
 
 $cmbPresets.Add_SelectedIndexChanged({
     switch ($cmbPresets.SelectedIndex) {
@@ -258,170 +390,164 @@ $cmbPresets.Add_SelectedIndexChanged({
     }
 })
 
-$btnIniciar = New-Object System.Windows.Forms.Button
-$btnIniciar.Location = New-Object System.Drawing.Point(350, 508); $btnIniciar.Size = New-Object System.Drawing.Size(235, 52)
-$btnIniciar.Text = "▶ INICIAR PROCESSAMENTO"
-$btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
-$btnIniciar.ForeColor = [System.Drawing.Color]::White
-$btnIniciar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$btnIniciar.Add_Click({
-    # Captura a seleção ANTES de fechar a janela
-    $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
-      $global:videosSelecionados = @()
-    foreach ($item in $chkListVideos.CheckedItems) { $global:videosSelecionados += $global:mapaVideos[$item.ToString()] }
-    
-    # Fecha o formulário manualmente com sucesso
-    $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
-    $form.Close()
-})
-$form.Controls.Add($btnIniciar)
-
-# === DRAG AND DROP ABSOLUTO (SEM BLOQUEIOS) ===
+# Drag and Drop Limpo (Só ativa quando você solta arquivos com o mouse)
 $acaoDragEnter = {
     param($sender, $e)
-    if ($e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) { $e.Effect = 'Copy' }
+    try {
+        if ($e.Data -and $e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+            $e.Effect = [System.Windows.Forms.DragDropEffects]::Copy
+        }
+    } catch { }
 }
+
 $acaoDragDrop = {
     param($sender, $e)
-    $files = $e.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
-    if (-not $files) { return }
-    foreach ($f in $files) {
-        $abs = [System.IO.Path]::GetFullPath($f)
-        $name = [System.IO.Path]::GetFileName($abs)
-        $global:mapaVideos[$name] = $abs
-        $exists = $false
-        foreach ($item in $chkListVideos.Items) { if ($item.ToString() -eq $name) { $exists = $true; break } }
-        if (-not $exists) {
-            $idx = $chkListVideos.Items.Add($name, $true)
-            $chkListVideos.SetItemChecked($idx, $true)
+    try {
+        if ($e.Data -and $e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+            $files = $e.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+            if ($files) {
+                $adicionados = 0
+                foreach ($f in $files) {
+                    $abs = [System.IO.Path]::GetFullPath($f)
+                    $name = [System.IO.Path]::GetFileName($abs)
+                    
+                    # Evita duplicatas conferindo o caminho real
+                    if ($global:mapaVideos.Values -contains $abs) { continue }
+                    
+                    $dur = Obter-DuracaoVideo $abs
+                    $rotulo = if ($dur) { "$name  [$dur]" } else { $name }
+                    
+                    $global:mapaVideos[$rotulo] = $abs
+                    [void]$chkListVideos.Items.Add($rotulo, $true)
+                    $adicionados++
+                }
+                if ($adicionados -gt 0) {
+                    Write-Host "[DRAG & DROP] $adicionados novo(s) video(s) com duracao adicionado(s)!" -ForegroundColor Green
+                }
+            }
         }
-    }
-    Write-Host "[SUCESSO] Vídeo capturado de pasta externa e adicionado à interface!" -ForegroundColor Green
+    } catch { }
 }
 $form.AllowDrop = $true; $form.Add_DragEnter($acaoDragEnter); $form.Add_DragDrop($acaoDragDrop)
 $chkListVideos.AllowDrop = $true; $chkListVideos.Add_DragEnter($acaoDragEnter); $chkListVideos.Add_DragDrop($acaoDragDrop)
 $tabSelecao.AllowDrop = $true; $tabSelecao.Add_DragEnter($acaoDragEnter); $tabSelecao.Add_DragDrop($acaoDragDrop)
 $tabControl.AllowDrop = $true; $tabControl.Add_DragEnter($acaoDragEnter); $tabControl.Add_DragDrop($acaoDragDrop)
-# ===============================================
+
+# --- RODAPÉ PROFISSIONAL ---
+$global:blurAtivo = $true
+$btnBlur = New-Object System.Windows.Forms.Button
+$btnBlur.Location = New-Object System.Drawing.Point(20, 460)
+$btnBlur.Size = New-Object System.Drawing.Size(220, 30)
+$btnBlur.Text = "✨ Tema: DARK + BLUR"
+$btnBlur.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$btnBlur.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnBlur.FlatAppearance.BorderSize = 1
+$btnBlur.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(99, 102, 241)
+$btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58)
+$btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252)
+$btnBlur.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnBlur.Add_Click({
+    $global:blurAtivo = -not $global:blurAtivo
+    if ($global:blurAtivo) { Aplicar-TemaModerno } else { Aplicar-TemaClassico }
+})
+
+$lblPausa = New-Object System.Windows.Forms.Label
+$lblPausa.Text = "Pausas:"
+$lblPausa.Location = New-Object System.Drawing.Point(20, 506)
+$lblPausa.AutoSize = $true
+$lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$lblPausa.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 240)
+
+$trackPausa = New-Object System.Windows.Forms.TrackBar
+$trackPausa.Location = New-Object System.Drawing.Point(75, 500)
+$trackPausa.Size = New-Object System.Drawing.Size(115, 30)
+$trackPausa.Minimum = 15; $trackPausa.Maximum = 50; $trackPausa.Value = 25; $trackPausa.TickFrequency = 5
+$lblPausaVal = New-Object System.Windows.Forms.Label
+$lblPausaVal.Text = "2.5s"; $lblPausaVal.Location = New-Object System.Drawing.Point(195, 506); $lblPausaVal.AutoSize = $true
+$lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$lblPausaVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
+$trackPausa.Add_ValueChanged({ $lblPausaVal.Text = (($trackPausa.Value / 10.0).ToString("0.0") + "s") })
+
+$lblOpacidade = New-Object System.Windows.Forms.Label
+$lblOpacidade.Text = "Opacidade:"
+$lblOpacidade.Location = New-Object System.Drawing.Point(20, 548)
+$lblOpacidade.AutoSize = $true
+$lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$lblOpacidade.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 240)
+
+$trackOpacidade = New-Object System.Windows.Forms.TrackBar
+$trackOpacidade.Location = New-Object System.Drawing.Point(85, 542)
+$trackOpacidade.Size = New-Object System.Drawing.Size(105, 30)
+$trackOpacidade.Minimum = 80; $trackOpacidade.Maximum = 100; $trackOpacidade.Value = 98; $trackOpacidade.TickFrequency = 5
+$lblOpacidadeVal = New-Object System.Windows.Forms.Label
+$lblOpacidadeVal.Text = "98%"; $lblOpacidadeVal.Location = New-Object System.Drawing.Point(195, 548); $lblOpacidadeVal.AutoSize = $true
+$lblOpacidadeVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$lblOpacidadeVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
+$trackOpacidade.Add_ValueChanged({
+    $form.Opacity = ($trackOpacidade.Value / 100.0)
+    $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
+})
 
 $btnCancelar = New-Object System.Windows.Forms.Button
-$btnCancelar.Location = New-Object System.Drawing.Point(245, 508); $btnCancelar.Size = New-Object System.Drawing.Size(95, 52)
 $btnCancelar.Text = "Cancelar"
-$btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$btnCancelar.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$btnCancelar.Location = New-Object System.Drawing.Point(250, 498)
+$btnCancelar.Size = New-Object System.Drawing.Size(95, 74)
+$btnCancelar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnCancelar.FlatAppearance.BorderSize = 1
+$btnCancelar.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(75, 85, 99)
+$btnCancelar.BackColor = [System.Drawing.Color]::FromArgb(38, 41, 54)
+$btnCancelar.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 235)
+$btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnCancelar.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnCancelar.Add_Click({ $form.Close() })
 $form.Controls.Add($btnCancelar)
 
-    # --- RODAPÉ PROFISSIONAL REORGANIZADO ---
-    # Linha 1: Botão Vidro / Blur (Y = 460)
-    $global:blurAtivo = $true
-    $btnBlur = New-Object System.Windows.Forms.Button
-    $btnBlur.Location = New-Object System.Drawing.Point(18, 460)
-    $btnBlur.Size = New-Object System.Drawing.Size(220, 30)
-    $btnBlur.Text = "✨ Efeito Vidro: ATIVADO"
-    $btnBlur.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $btnBlur.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $btnBlur.FlatAppearance.BorderSize = 1
-    $btnBlur.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(99, 102, 241)
-    $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58)
-    $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252)
-    $btnBlur.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnIniciar = New-Object System.Windows.Forms.Button
+$btnIniciar.Location = New-Object System.Drawing.Point(355, 498)
+$btnIniciar.Size = New-Object System.Drawing.Size(240, 74)
+$btnIniciar.Text = "▶ INICIAR PROCESSAMENTO"
+$btnIniciar.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
+$btnIniciar.ForeColor = [System.Drawing.Color]::White
+$btnIniciar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnIniciar.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnIniciar.Add_MouseEnter({ $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(52, 211, 153) })
+$btnIniciar.Add_MouseLeave({ $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129) })
 
-    $btnBlur.Add_Click({
-        $global:blurAtivo = -not $global:blurAtivo
-        if ($global:blurAtivo) {
-            $modo = 3
-            $form.Opacity = ($trackOpacidade.Value / 100.0)
-            $btnBlur.Text = "✨ Efeito Vidro: ATIVADO"
-            $btnBlur.ForeColor = [System.Drawing.Color]::FromArgb(165, 180, 252)
-            $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(38, 40, 58)
-        } else {
-            $modo = 1
-            $form.Opacity = 1.0
-            $btnBlur.Text = "⚪ Efeito Vidro: DESATIVADO"
-            $btnBlur.ForeColor = [System.Drawing.Color]::Gray
-            $btnBlur.BackColor = [System.Drawing.Color]::FromArgb(26, 27, 38)
-        }
-        [Win32Dwm]::DwmSetWindowAttribute($form.Handle, 38, [ref]$modo, 4)
-    })
+$btnIniciar.Add_Click({
+    $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
+    $global:videosSelecionados = @()
+    foreach ($item in $chkListVideos.CheckedItems) {
+        $global:videosSelecionados += $global:mapaVideos[$item.ToString()]
+    }
+    $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Close()
+})
+$form.Controls.Add($btnIniciar)
 
-    # Linha 2: Slider de Pausa (Y = 502)
-    $lblPausa = New-Object System.Windows.Forms.Label
-    $lblPausa.Text = "Pausas:"
-    $lblPausa.Location = New-Object System.Drawing.Point(18, 506)
-    $lblPausa.AutoSize = $true
-    $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $lblPausa.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55); $lblPausa.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$form.Controls.AddRange(@($btnBlur, $lblPausa, $trackPausa, $lblPausaVal, $lblOpacidade, $trackOpacidade, $lblOpacidadeVal))
 
-    $trackPausa = New-Object System.Windows.Forms.TrackBar
-    $trackPausa.Location = New-Object System.Drawing.Point(75, 500)
-    $trackPausa.Size = New-Object System.Drawing.Size(115, 30)
-    $trackPausa.Minimum = 15
-    $trackPausa.Maximum = 50
-    $trackPausa.Value = 25
-    $trackPausa.TickFrequency = 5
+# Abre a janela diretamente estilizada
+$form.Add_Shown({
+    Aplicar-TemaModerno
+    $form.ClientSize = New-Object System.Drawing.Size(620, 620)
+    $form.Activate()
+})
 
-    $lblPausaVal = New-Object System.Windows.Forms.Label
-    $lblPausaVal.Text = "2.5s"
-    $lblPausaVal.Location = New-Object System.Drawing.Point(195, 506)
-    $lblPausaVal.AutoSize = $true
-    $lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $lblPausaVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
+$resDialog = $form.ShowDialog()
+if ($resDialog -ne [System.Windows.Forms.DialogResult]::OK) {
+    Write-Host "`n[CANCELADO] Execucao cancelada pelo usuario." -ForegroundColor Yellow
+    exit 0
+}
 
-    $trackPausa.Add_ValueChanged({
-        $segundos = ($trackPausa.Value / 10.0).ToString("0.0")
-        $lblPausaVal.Text = "${segundos}s"
-    })
 
-    # Linha 3: Slider de Opacidade (Y = 544)
-    $lblOpacidade = New-Object System.Windows.Forms.Label
-    $lblOpacidade.Text = "Opacidade:"
-    $lblOpacidade.Location = New-Object System.Drawing.Point(18, 548)
-    $lblOpacidade.AutoSize = $true
-    $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $lblOpacidade.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55); $lblOpacidade.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-
-    $trackOpacidade = New-Object System.Windows.Forms.TrackBar
-    $trackOpacidade.Location = New-Object System.Drawing.Point(85, 542)
-    $trackOpacidade.Size = New-Object System.Drawing.Size(105, 30)
-    $trackOpacidade.Minimum = 40
-    $trackOpacidade.Maximum = 100
-    $trackOpacidade.Value = 95
-    $trackOpacidade.TickFrequency = 20
-
-    $lblOpacidadeVal = New-Object System.Windows.Forms.Label
-    $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
-    $lblOpacidadeVal.Location = New-Object System.Drawing.Point(195, 548)
-    $lblOpacidadeVal.AutoSize = $true
-    $lblOpacidadeVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-    $lblOpacidadeVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
-
-    $trackOpacidade.Add_ValueChanged({
-        $form.Opacity = $trackOpacidade.Value / 100.0
-        $lblOpacidadeVal.Text = "$($trackOpacidade.Value)%"
-    })
-    $form.Opacity = $trackOpacidade.Value / 100.0
-
-    # Botões de Ação à Direita (Y = 498)
-    $btnCancelar.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
-    $btnCancelar.Location = New-Object System.Drawing.Point(250, 498)
-    $btnCancelar.Size = New-Object System.Drawing.Size(95, 74)
-
-    $btnIniciar.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
-    $btnIniciar.Location = New-Object System.Drawing.Point(355, 498)
-    $btnIniciar.Size = New-Object System.Drawing.Size(240, 74)
-
-    $form.Controls.AddRange(@($btnBlur, $lblPausa, $trackPausa, $lblPausaVal, $lblOpacidade, $trackOpacidade, $lblOpacidadeVal))
-
-    # Força as dimensões reais assim que a janela é exibida no ecrã
-    $form.Add_Shown({
-        $this.ClientSize = New-Object System.Drawing.Size(620, 620)
-    })
-    # ---------------------------------
-    $form.AcceptButton = $btnIniciar
-$form.CancelButton = $btnCancelar
-
-if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
+# Garante pasta de destino padrao caso o campo tenha ficado em branco
+if ([string]::IsNullOrWhiteSpace($txtDestino.Text)) {
+    $txtDestino.Text = Join-Path $raiz "saida\$nomeAula"
+}
+if (-not (Test-Path -LiteralPath $txtDestino.Text.Trim())) {
+    [void](New-Item -Path $txtDestino.Text.Trim() -ItemType Directory -Force)
+}
 
 # [CORREÇÃO DO MOTOR]
 $videos = @()
