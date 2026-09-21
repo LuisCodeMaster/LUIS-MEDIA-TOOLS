@@ -182,9 +182,9 @@ if (Test-Path $configFile) {
 }
 
 if ($CaminhoPasta -ne "") {
-    $itemAlvo = Get-Item -LiteralPath$CaminhoPasta
+    $itemAlvo = Get-Item -LiteralPath $CaminhoPasta
     if ($itemAlvo.PSIsContainer) { $dirEntrada =$itemAlvo.FullName; $nomeAula =$itemAlvo.Name }
-    else { $dirEntrada =$itemAlvo.DirectoryName; $nomeAula = (Get-Item$dirEntrada).Name }
+    else { $dirEntrada = $itemAlvo.DirectoryName; $nomeAula = (Get-Item $dirEntrada).Name }
 } else {
     if ($Aula -eq "") { $Aula = "Aula1" }
     $nomeAula =$Aula; $dirEntrada = Join-Path $raiz "entrada\$nomeAula"
@@ -536,15 +536,66 @@ $btnIniciar.Add_MouseEnter({ $btnIniciar.BackColor = [System.Drawing.Color]::Fro
 $btnIniciar.Add_MouseLeave({ $btnIniciar.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129) })
 
 $btnIniciar.Add_Click({
-    $global:encoderEscolhido = $cmbEncoder.SelectedIndex
-    $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
+    $global:encoderEscolhido =$cmbEncoder.SelectedIndex
+    if ($trackPausa) {
+        $global:limitePausa = ($trackPausa.Value / 10.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+
     $global:videosSelecionados = @()
     foreach ($item in $chkListVideos.CheckedItems) {
-        $global:videosSelecionados += $global:mapaVideos[$item.ToString()]
+        if ($global:mapaVideos.ContainsKey($item)) {$global:videosSelecionados += $global:mapaVideos[$item]
+        } else {
+            $global:videosSelecionados += $item
+        }
     }
-    $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
-    $form.Close()
+
+    if ($global:videosSelecionados.Count -eq 0) {         [System.Windows.Forms.MessageBox]::Show($form, "Selecione ou arraste pelo menos um vídeo para a lista antes de iniciar.", "Aviso", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return
+    }
+
+    $btnIniciar.Enabled = $false; $btnIniciar.Text = [char]0x23F3 + " PROCESSANDO..."
+    Atualizar-ProgressoUI 2 "Iniciando esteira de processamento..."
+
+    Executar-MotorPipeline
+
+    Atualizar-ProgressoUI 100 "Concluído!"
+
+    $opcao = [System.Windows.Forms.MessageBox]::Show($form,
+        "Todos os vídeos foram processados com sucesso!`n`nDeseja fechar o programa?",
+        "Processamento Concluído",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+
+    if ($opcao -eq [System.Windows.Forms.DialogResult]::Yes) { $form.Close(); 
+    } else {
+        $btnIniciar.Enabled = $true; $btnIniciar.Text = [char]0x25B6 + " INICIAR PROCESSAMENTO"
+        Atualizar-ProgressoUI 0 "Pronto para novo processamento."
+    }
 })
+
+$form.ClientSize = New-Object System.Drawing.Size(615, 630)
+
+$global:pbarProgresso = New-Object System.Windows.Forms.ProgressBar
+$global:pbarProgresso.Location = New-Object System.Drawing.Point(20, 582); $global:pbarProgresso.Size = New-Object System.Drawing.Size(575, 12)
+$global:pbarProgresso.Style = [System.Windows.Forms.ProgressBarStyle]::Continuous; $global:pbarProgresso.Value = 0
+$form.Controls.Add($global:pbarProgresso)
+
+$global:lblStatusProgresso = New-Object System.Windows.Forms.Label
+$global:lblStatusProgresso.Location = New-Object System.Drawing.Point(20, 598)
+$global:lblStatusProgresso.Size = New-Object System.Drawing.Size(575, 22); $global:lblStatusProgresso.Text = "Status: Pronto para iniciar."
+$global:lblStatusProgresso.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+$global:lblStatusProgresso.BackColor = [System.Drawing.Color]::Transparent; $global:lblStatusProgresso.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$form.Controls.Add($global:lblStatusProgresso)
+
+function Global:Atualizar-ProgressoUI([int]$pct, [string]$texto) {
+    try {
+        $global:pbarProgresso.Value = [Math]::Min(100, [Math]::Max(0,$pct))
+        $global:lblStatusProgresso.Text = "Status: " + $texto
+        $global:pbarProgresso.Refresh(); $global:lblStatusProgresso.Refresh()
+        [System.Windows.Forms.Application]::DoEvents()
+    } catch { }
+}
 $form.Controls.Add($btnIniciar)
 
 $form.Controls.AddRange(@($btnBlur, $lblPausa, $trackPausa, $lblPausaVal, $lblOpacidade, $trackOpacidade, $lblOpacidadeVal))
@@ -556,13 +607,9 @@ $form.Add_Shown({
     $form.Activate()
 })
 
-$resDialog = $form.ShowDialog()
-if ($resDialog -ne [System.Windows.Forms.DialogResult]::OK) {
-    Write-Host "`n[CANCELADO] Execucao cancelada pelo usuario." -ForegroundColor Yellow
-    exit 0
-}
 
 
+function Global:Executar-MotorPipeline {
 # Garante pasta de destino padrao caso o campo tenha ficado em branco
 if ([string]::IsNullOrWhiteSpace($txtDestino.Text)) {
     $txtDestino.Text = Join-Path $raiz "saida\$nomeAula"
@@ -682,7 +729,8 @@ foreach ($video in $videos) {
     $srtFinal = Join-Path $pastas["1"] "$nome.srt"
     $assFinal = Join-Path $pastas["1"] "$nome.ass"
     
-    Write-Host "    Transcrevendo com Whisper (Word Timestamps) para Legenda Fluida..." -ForegroundColor Yellow
+    Write-Host "    Transcrevendo com Whisper (Word Timestamps) para Legenda Fluida..."
+    Atualizar-ProgressoUI 55 "Transcrevendo com Whisper..." -ForegroundColor Yellow
     $scriptTranscricao = @"
 import os
 try:
@@ -745,7 +793,8 @@ $argsEncoder = switch ($global:encoderEscolhido) {
         if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
         $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
         if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao com Legenda Fluida para Aulas..." -ForegroundColor Magenta
+            Write-Host "    Renderizando versao com Legenda Fluida para Aulas..."
+    Atualizar-ProgressoUI 75 "Renderizando Legenda Fluida via GPU AMF..." -ForegroundColor Magenta
             
             # Formata caminho para o FFmpeg escapando apenas os dois-pontos do drive (sem barra invertida no final)
             $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
@@ -760,7 +809,8 @@ $argsEncoder = switch ($global:encoderEscolhido) {
             }
 
             if (Test-Path $videoLegendado) {
-                Write-Host "    [OK] Video legendado gerado com sucesso!" -ForegroundColor Green
+                Write-Host "    [OK] Video legendado gerado com sucesso!"
+    Atualizar-ProgressoUI 88 "Renderização concluída." -ForegroundColor Green
             }
         }
     }
@@ -824,3 +874,8 @@ explorer.exe $dirSaida
 
 
 
+
+}
+
+
+[void]$form.ShowDialog()
