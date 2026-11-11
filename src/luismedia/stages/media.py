@@ -179,6 +179,7 @@ def extract_slides(src: MediaInfo, out_dir: Path, threshold: float) -> list[Slid
 # --------------------------------------------------------------------------- hardsub
 def burn_subtitles(src: MediaInfo, ass: Path, out: Path, *, encoder: Encoder, crf: int,
                    work: Path) -> Path:
+    ff.require_filter("subtitles", "legenda queimada")
     local = work / "subs.ass"
     shutil.copyfile(ass, local)
 

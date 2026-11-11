@@ -16,7 +16,7 @@ from luismedia.core.errors import InvalidMedia, ProcessFailed, ProcessTimeout
 from luismedia.core.models import Segment, Transcript
 from luismedia.stages import media
 
-from .conftest import needs_ffmpeg
+from .conftest import needs_ffmpeg, needs_libass
 
 pytestmark = [pytest.mark.integration, needs_ffmpeg]
 
@@ -81,6 +81,7 @@ def test_slides_have_real_timestamps(tmp_path, lesson_video):
     assert times == [0, 4, 8]  # abertura + trocas de cor em 4 s e 8 s
 
 
+@needs_libass
 def test_hardsub_with_hostile_path(tmp_path, lesson_video):
     # pasta com espaco, apostrofo e colchete: quebrava o escape manual do script antigo
     d = tmp_path / "Aula d'Ouro [final]"
@@ -98,6 +99,7 @@ class FakeWhisper:
                           segments=[Segment(start=0, end=2.5, text="Bem-vindos a aula.")])
 
 
+@needs_libass
 def test_pipeline_end_to_end_with_checkpoint(tmp_path, lesson_video, monkeypatch):
     from luismedia.pipeline.runner import Pipeline
 
@@ -158,6 +160,7 @@ class FakeOllama:
         return R(_json.dumps({"response": out}).encode())
 
 
+@needs_libass
 def test_pipeline_with_ai_and_vertical_clip(tmp_path, lesson_video):
     from luismedia.adapters.ollama import OllamaClient
     from luismedia.pipeline.runner import Pipeline
@@ -203,3 +206,15 @@ def test_unexpected_error_fails_only_that_video(tmp_path, lesson_video):
     results = p.run([lesson_video, lesson_video], tmp_path / "out")
     assert len(results) == 2 and all(r.failed_stage == "transcricao" for r in results)
     assert "403" in results[0].error
+
+
+def test_missing_subtitles_filter_is_clear_warning(tmp_path, lesson_video, monkeypatch):
+    from luismedia.pipeline.runner import Pipeline
+
+    monkeypatch.setattr(ff, "has_filter", lambda name: False)
+    s = Settings(render={"encoder": "libx264"}, autocut={"enabled": False}, llm={"enabled": False},
+                 slides={"enabled": False, "handout": False}, audio={"master": False})
+    p = Pipeline(s)
+    p.whisper = FakeWhisper()
+    [r] = p.run([lesson_video], tmp_path / "out")
+    assert r.ok and any("filtro 'subtitles'" in w for w in r.warnings)

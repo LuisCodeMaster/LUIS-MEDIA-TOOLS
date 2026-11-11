@@ -16,6 +16,16 @@ HAS_FFMPEG = shutil.which("ffmpeg") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg ausente")
 
 
+def _has_libass() -> bool:
+    if not HAS_FFMPEG:
+        return False
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    return " subtitles " in out
+
+
+needs_libass = pytest.mark.skipif(not _has_libass(), reason="ffmpeg sem libass (filtro subtitles)")
+
+
 def _ff(*args: str) -> None:
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args], check=True)
 

@@ -138,7 +138,10 @@ def run_ffmpeg(
             t.join(timeout=5)
 
     if proc.returncode != 0:
-        last = next((ln for ln in reversed(stderr_tail) if ln.strip()), "")
+        # a primeira linha de erro costuma ser a causa; a ultima, so o efeito
+        keys = ("No such", "Unrecognized", "not found", "Unknown", "Invalid", "Error")
+        lines = [ln for ln in stderr_tail if ln.strip()]
+        last = next((ln for ln in lines if any(k in ln for k in keys)), lines[-1] if lines else "")
         raise ProcessFailed(
             f"ffmpeg saiu com codigo {proc.returncode}" + (f": {last[:300]}" if last else ""),
             returncode=proc.returncode,
@@ -146,6 +149,23 @@ def run_ffmpeg(
         )
     if on_progress:
         on_progress(1.0)
+
+
+@cache
+def has_filter(name: str) -> bool:
+    """O build instalado tem este filtro? (ex.: 'subtitles' exige libass)."""
+    try:
+        out = subprocess.run([find_binary("ffmpeg"), "-hide_banner", "-filters"], capture_output=True,
+                             text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return re.search(rf"^\s*\S+\s+{re.escape(name)}\s", out, re.M) is not None
+
+
+def require_filter(name: str, why: str) -> None:
+    if not has_filter(name):
+        raise DependencyMissing(f"este FFmpeg nao tem o filtro '{name}' ({why}); instale um build completo, "
+                                "ex.: gyan.dev no Windows ou ffmpeg com libass")
 
 
 @cache

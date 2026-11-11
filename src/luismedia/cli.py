@@ -42,6 +42,7 @@ def cmd_doctor(settings: Settings) -> int:
         except LuisMediaError as e:
             checks.append((b, False, str(e)))
     if checks[0][1]:
+        checks.append(("legenda queimada (libass)", ff.has_filter("subtitles"), "filtro subtitles"))
         for enc in (Encoder.NVIDIA, Encoder.AMD, Encoder.INTEL):
             checks.append((f"encoder {enc.value}", ff.encoder_works(enc), "teste de 1 frame"))
     try:

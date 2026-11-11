@@ -15,7 +15,7 @@
 - `relatorio.json`, log `job.log.jsonl`, capitulos do YouTube e `Entregavel.zip` (ZIP64).
 - Encoder "Automatico" que testa NVENC, AMF e QSV antes de usar, com fallback para CPU.
 - `instalar.ps1`, opcoes [D] diagnostico e [I] instalar no menu, empacotamento PyInstaller.
-- CI no GitHub Actions (Windows, Linux, macOS) com 44 testes e checagem dos .ps1.
+- CI no GitHub Actions (Windows, Linux, macOS) com 45 testes e checagem dos .ps1.
 
 ### Corrigido
 - Videos originais eram movidos para a pasta de saida.

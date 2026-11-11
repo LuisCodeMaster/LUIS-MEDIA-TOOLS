@@ -124,7 +124,7 @@ continuam disponíveis e corrigidos enquanto a migração para o motor novo term
 ```bash
 python -m pip install -e ".[dev]"
 ruff check src tests
-pytest -q            # 44 testes; os de integração geram vídeos sintéticos com o FFmpeg
+pytest -q            # 45 testes; os de integração geram vídeos sintéticos com o FFmpeg
 ```
 
 Versão portátil para Windows, com o motor empacotado e o FFmpeg embutido:

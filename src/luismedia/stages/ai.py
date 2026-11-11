@@ -113,6 +113,7 @@ def pick_clips(client: OllamaClient, tr: Transcript, n: int, max_chars: int) -> 
 def render_vertical_clip(src: MediaInfo, clip: ClipSuggestion, tr: Transcript, out: Path,
                          *, encoder: Encoder, crf: int, rules: SegmentationRules) -> Path:
     """Corte 9:16: fundo desfocado + video centralizado + legenda grande queimada."""
+    ff.require_filter("subtitles", "legenda nos cortes 9:16")
     work = out.parent
     dur = min(clip.end, src.duration) - clip.start
     local: list[Segment] = []
