@@ -54,7 +54,7 @@ def detect_silences(audio: Path, duration: float, cfg: AutoCutConfig) -> list[Sp
     cmd = [ff.find_binary("ffmpeg"), "-hide_banner", "-nostdin", "-i", str(audio),
            "-af", f"silencedetect=noise={cfg.noise_db}dB:d={cfg.min_silence_s}", "-f", "null", "-"]
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", **ff.NO_WINDOW,
                              errors="replace", timeout=max(120, duration))
     except subprocess.TimeoutExpired as exc:
         raise ProcessTimeout("silencedetect travou") from exc
@@ -139,7 +139,7 @@ def master_audio(src: Path, out: Path, duration: float, cfg: AudioConfig) -> Pat
     target = f"I={cfg.target_lufs}:TP={cfg.true_peak_db}:LRA={cfg.lra}"
     cmd = [ff.find_binary("ffmpeg"), "-hide_banner", "-nostdin", "-i", str(src),
            "-af", f"{voice},loudnorm={target}:print_format=json", "-f", "null", "-"]
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", **ff.NO_WINDOW,
                          errors="replace", timeout=max(120, duration * 2))
     if res.returncode != 0:
         raise ProcessFailed("medicao de loudness falhou", returncode=res.returncode, detail=res.stderr[-2000:])

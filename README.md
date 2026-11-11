@@ -1,6 +1,6 @@
 ﻿# LUIS MEDIA TOOLS
 
-Pós-produção de aulas em vídeo com IA **100% local**. Você solta os vídeos brutos e recebe:
+Aplicativo desktop de pós-produção de aulas em vídeo com IA **100% local**. Você arrasta os vídeos brutos para a janela e recebe:
 o vídeo sem as pausas, as legendas, o áudio no padrão do YouTube, a apostila ilustrada em PDF,
 um quiz de fixação e cortes verticais prontos para Reels, Shorts e TikTok.
 
@@ -29,8 +29,8 @@ Os vídeos originais **nunca são movidos nem apagados**. Se o processamento par
 1. Baixe o projeto (botão **Code → Download ZIP**) e extraia numa pasta.
 2. Dê dois cliques em **`Instalar.cmd`**. Se o Windows mostrar um aviso de segurança, clique
    em **Executar**.
-3. Depois, para usar, dê dois cliques em **`Abrir LUIS MEDIA TOOLS.cmd`**. O
-   **`Menu LUIS MEDIA TOOLS.cmd`** abre o menu com todas as ferramentas.
+3. Pronto: abra o app pelo atalho **LUIS MEDIA TOOLS** na Área de Trabalho ou no Menu Iniciar
+   (ou por `Abrir LUIS MEDIA TOOLS.cmd`).
 
 O instalador libera os scripts que o Windows bloqueia em arquivos baixados, confere o Python 3.10+, cria um ambiente isolado (`.venv`), instala o motor e o
 Whisper, oferece instalar o FFmpeg e o Ollama via `winget` e baixa o modelo de IA
@@ -41,28 +41,30 @@ como aviso no relatório.
 
 ## Como usar
 
-### Interface gráfica
+### App desktop
 
-Dois cliques em `Abrir LUIS MEDIA TOOLS.cmd`. Pelo terminal:
+A janela tem quatro telas:
 
-```powershell
-.\luis-media.ps1          # menu: [A] piloto automático, [D] diagnóstico, [I] instalar
-.\pipeline-completo.ps1   # abre direto a interface
-```
+- **Processar aulas:** arraste vídeos ou pastas, escolha o modo (Curso completo, Foco em redes
+  sociais, Pré-edição para DaVinci/Premiere ou Personalizado), ajuste as opções e clique em
+  **Iniciar**. A tabela mostra a etapa de cada vídeo, **Cancelar** para na hora sem perder o
+  que já ficou pronto, e no fim aparece o resumo com o botão **Abrir pasta de saída**.
+- **Slides com IA:** escreva o tema, a IA monta o roteiro, você ajusta o texto e gera uma
+  apresentação 16:9 interativa (laser, desenho, notas, visão geral, exportar PDF).
+- **Diagnóstico:** confere FFmpeg, placa de vídeo, Whisper, Ollama e navegador, explica como
+  resolver o que faltar e baixa o modelo de IA com um clique.
+- **Configurações:** modelo e idioma do Whisper, modelo do Ollama, qualidade do vídeo, volume
+  alvo e o que entra no ZIP.
 
-Se o PowerShell disser que o script "is not digitally signed", rode uma vez
-`Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File` na pasta (o `Instalar.cmd` já faz isso).
-
-Escolha um preset (Curso completo, Foco em redes, Pré-edição NLE), arraste os vídeos para a
-lista, escolha a pasta de destino e clique em **Iniciar**. A barra mostra o vídeo e a etapa
-em andamento, e **Cancelar** interrompe sem perder o que já ficou pronto.
+A janela antiga em PowerShell (`pipeline-completo.ps1`) e o menu (`luis-media.ps1`)
+continuam disponíveis.
 
 ### Linha de comando (Windows, Linux e macOS)
 
 ```bash
 luismedia doctor                                    # confere FFmpeg, GPU, Whisper, Ollama e navegador
 luismedia run aula1.mp4 aula2.mp4 -o saida/         # processa com o perfil padrao
-luismedia --profile profiles/redes-sociais.yaml run entrada/Aula1 -o saida/
+luismedia --profile redes-sociais run entrada/Aula1 -o saida/
 luismedia --profile meu-perfil.yaml config          # mostra a configuracao final validada
 ```
 
@@ -70,7 +72,7 @@ luismedia --profile meu-perfil.yaml config          # mostra a configuracao fina
 
 ### Perfis
 
-Perfis prontos em `profiles/`:
+Perfis prontos em `src/luismedia/profiles/` (na linha de comando, use só o nome: `--profile redes-sociais`):
 
 - `curso-completo.yaml`: tudo ativado.
 - `redes-sociais.yaml`: vídeo enxuto, legenda queimada e 5 cortes 9:16. Sem apostila.
@@ -102,7 +104,7 @@ saida/
 
 ## Requisitos
 
-- Windows 10/11 para a interface gráfica. O motor (CLI) também roda em Linux e macOS.
+- Windows 10/11. O app e o motor (CLI) também rodam em Linux e macOS.
 - Python 3.10+ (o `instalar.ps1` cuida disso) e FFmpeg.
 - 8 GB de RAM recomendados. Uma GPU NVIDIA acelera o Whisper. Placas AMD, NVIDIA e Intel
   aceleram a codificação do vídeo, e o modo **Automático** testa a placa e escolhe sozinho.
@@ -112,7 +114,7 @@ saida/
 ## Arquitetura
 
 ```text
-Interfaces (GUI PowerShell, CLI)  ->  Pipeline (etapas, checkpoint, eventos)
+Interfaces (app Qt, CLI, GUI PowerShell)  ->  Pipeline (etapas, checkpoint, eventos)
                                   ->  Core (config, schemas, legendas, erros)
                                   ->  Adapters (FFmpeg, Whisper, Ollama, PDF)
 ```
@@ -127,10 +129,10 @@ continuam disponíveis e corrigidos enquanto a migração para o motor novo term
 ```bash
 python -m pip install -e ".[dev]"
 ruff check src tests
-pytest -q            # 45 testes; os de integração geram vídeos sintéticos com o FFmpeg
+pytest -q            # 50 testes; os de integração geram vídeos sintéticos com o FFmpeg
 ```
 
-Versão portátil para Windows, com o motor empacotado e o FFmpeg embutido:
+Versão portátil para Windows, com o app (`LUIS MEDIA TOOLS.exe`), a CLI e o FFmpeg embutidos:
 
 ```powershell
 .\packaging\build-windows.ps1 -FFmpegDir C:\ffmpeg\bin

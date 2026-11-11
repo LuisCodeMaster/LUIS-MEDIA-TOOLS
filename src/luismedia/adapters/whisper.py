@@ -16,7 +16,7 @@ from pathlib import Path
 from threading import Lock
 
 from ..core.config import WhisperConfig, WhisperDevice
-from ..core.errors import DependencyMissing, OutOfMemory, TranscriptionFailed
+from ..core.errors import Cancelled, DependencyMissing, OutOfMemory, TranscriptionFailed
 from ..core.logging import get_logger
 from ..core.models import Segment, Transcript, Word
 
@@ -55,6 +55,7 @@ class WhisperEngine:
         self.cfg = cfg
         self._model = None
         self._loaded: tuple[str, str, str] | None = None
+        self.cancel = None  # threading.Event opcional, checado a cada segmento
 
     def _load(self, model: str, device: str, compute: str):
         try:
@@ -93,6 +94,8 @@ class WhisperEngine:
                     )
                     segments: list[Segment] = []
                     for s in seg_iter:  # gerador: o trabalho acontece aqui
+                        if self.cancel is not None and self.cancel.is_set():
+                            raise Cancelled("transcricao cancelada")
                         words = [Word(start=w.start, end=max(w.end, w.start), text=w.word,
                                       probability=w.probability) for w in (s.words or [])]
                         segments.append(Segment(start=s.start, end=max(s.end, s.start),
@@ -101,7 +104,7 @@ class WhisperEngine:
                             on_progress(min(1.0, s.end / duration))
                     return Transcript(language=info.language, duration=duration,
                                       segments=segments, model=model_name, device=device)
-                except DependencyMissing:
+                except (DependencyMissing, Cancelled):
                     raise
                 except Exception as exc:  # noqa: BLE001
                     last = exc

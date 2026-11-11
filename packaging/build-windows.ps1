@@ -1,8 +1,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Gera a versao portatil para Windows: pasta dist\LUIS-MEDIA-TOOLS com o motor
-    empacotado (motor\luismedia.exe), FFmpeg embutido e a interface.
+    Gera a versao portatil para Windows: pasta dist\LUIS-MEDIA-TOOLS com o app
+    ("LUIS MEDIA TOOLS\LUIS MEDIA TOOLS.exe"), a CLI (motor\luismedia.exe) e o FFmpeg embutido.
 
 .DESCRIPTION
     O cliente final nao precisa instalar Python. Precisa apenas, se quiser IA, do Ollama.
@@ -26,19 +26,25 @@ foreach ($b in "ffmpeg.exe", "ffprobe.exe") {
     if (-not (Test-Path -LiteralPath (Join-Path $FFmpegDir $b))) { throw "$b nao encontrado em $FFmpegDir" }
 }
 
-python -m pip install --upgrade pyinstaller -e ".[whisper]"
+python -m pip install --upgrade pyinstaller -e ".[whisper,gui]"
 if ($LASTEXITCODE -ne 0) { throw "falha ao instalar dependencias de build" }
 
-python -m PyInstaller --noconfirm --clean (Join-Path $PSScriptRoot "luismedia.spec")
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller falhou" }
+Push-Location $PSScriptRoot
+python -m PyInstaller --noconfirm --clean --distpath (Join-Path $raiz "dist") luismedia.spec
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "PyInstaller (CLI) falhou" }
+python -m PyInstaller --noconfirm --clean --distpath (Join-Path $raiz "dist") app.spec
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "PyInstaller (app) falhou" }
+Pop-Location
 
 if (Test-Path -LiteralPath $Saida) { Remove-Item -LiteralPath $Saida -Recurse -Force }
 New-Item -ItemType Directory -Path $Saida | Out-Null
 Copy-Item -Recurse (Join-Path $raiz "dist\luismedia") (Join-Path $Saida "motor")
-New-Item -ItemType Directory -Path (Join-Path $Saida "motor\bin") -Force | Out-Null
-Copy-Item (Join-Path $FFmpegDir "ffmpeg.exe"), (Join-Path $FFmpegDir "ffprobe.exe") (Join-Path $Saida "motor\bin")
-Copy-Item (Join-Path $raiz "*.ps1"), (Join-Path $raiz "README.md"), (Join-Path $raiz "LICENSE") $Saida
-Copy-Item -Recurse (Join-Path $raiz "profiles") $Saida
+Copy-Item -Recurse (Join-Path $raiz "dist\LUIS MEDIA TOOLS") (Join-Path $Saida "LUIS MEDIA TOOLS")
+foreach ($d in "motor\bin", "LUIS MEDIA TOOLS\bin") {
+    New-Item -ItemType Directory -Path (Join-Path $Saida $d) -Force | Out-Null
+    Copy-Item (Join-Path $FFmpegDir "ffmpeg.exe"), (Join-Path $FFmpegDir "ffprobe.exe") (Join-Path $Saida $d)
+}
+Copy-Item (Join-Path $raiz "Abrir LUIS MEDIA TOOLS.cmd"), (Join-Path $raiz "README.md"), (Join-Path $raiz "LICENSE"), (Join-Path $raiz "THIRD_PARTY.md") $Saida
 
 & (Join-Path $Saida "motor\luismedia.exe") doctor
 Write-Host "`nPronto: $Saida" -ForegroundColor Green

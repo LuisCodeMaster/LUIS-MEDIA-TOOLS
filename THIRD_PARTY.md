@@ -10,6 +10,7 @@ repositorio e mantem as suas proprias licencas.
 | Modelos [Whisper](https://github.com/openai/whisper) | Transcricao | MIT |
 | [Ollama](https://github.com/ollama/ollama) | Servidor de IA local | MIT |
 | [Llama 3.2](https://www.llama.com/llama3_2/license/) | Modelo de IA padrao | Llama 3.2 Community License |
+| [PySide6 / Qt](https://doc.qt.io/qtforpython-6/licenses.html) | Interface do app | LGPL v3 |
 | [pydantic](https://github.com/pydantic/pydantic) | Validacao | MIT |
 | [PyYAML](https://github.com/yaml/pyyaml) | Perfis | MIT |
 

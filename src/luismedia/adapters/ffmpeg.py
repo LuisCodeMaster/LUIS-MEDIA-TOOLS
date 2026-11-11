@@ -27,12 +27,25 @@ from functools import cache
 from pathlib import Path
 
 from ..core.config import Encoder
-from ..core.errors import DependencyMissing, InvalidMedia, ProcessFailed, ProcessTimeout
+from ..core.errors import Cancelled, DependencyMissing, InvalidMedia, ProcessFailed, ProcessTimeout
 from ..core.logging import get_logger
 from ..core.models import MediaInfo
 
 log = get_logger("ffmpeg")
 ProgressFn = Callable[[float], None]  # recebe 0.0 .. 1.0
+
+# No Windows, sem isto cada ffmpeg/ffprobe abre uma janela preta de console por um
+# instante quando o app roda sem console (pythonw / .exe com janela).
+NO_WINDOW: dict = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+
+# Evento de cancelamento do job atual: o Pipeline registra aqui e todo ffmpeg em
+# andamento e interrompido na hora (botao Cancelar da interface).
+_job_cancel: threading.Event | None = None
+
+
+def set_cancel_event(event: threading.Event | None) -> None:
+    global _job_cancel
+    _job_cancel = event
 
 
 def find_binary(name: str) -> str:
@@ -58,7 +71,7 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         return
     try:
         if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, **NO_WINDOW)
         else:
             os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
@@ -78,6 +91,7 @@ def run_ffmpeg(
     cwd: Path | None = None,
 ) -> None:
     """Executa ffmpeg com watchdog. ``args`` NAO inclui o binario nem -progress."""
+    cancel = cancel or _job_cancel
     cmd = [find_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
            "-progress", "pipe:1", "-nostats"]
     if threads:
@@ -122,7 +136,7 @@ def run_ffmpeg(
             now = time.monotonic()
             if cancel is not None and cancel.is_set():
                 _kill_tree(proc)
-                raise ProcessTimeout("cancelado pelo usuario")
+                raise Cancelled("cancelado pelo usuario")
             if timeout_s and now - started > timeout_s:
                 _kill_tree(proc)
                 raise ProcessTimeout(f"ffmpeg passou de {timeout_s:.0f}s", detail="\n".join(stderr_tail))
@@ -155,7 +169,7 @@ def run_ffmpeg(
 def has_filter(name: str) -> bool:
     """O build instalado tem este filtro? (ex.: 'subtitles' exige libass)."""
     try:
-        out = subprocess.run([find_binary("ffmpeg"), "-hide_banner", "-filters"], capture_output=True,
+        out = subprocess.run([find_binary("ffmpeg"), "-hide_banner", "-filters"], capture_output=True, **NO_WINDOW,
                              text=True, timeout=30).stdout
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -172,7 +186,7 @@ def require_filter(name: str, why: str) -> None:
 def ffmpeg_major_version() -> int:
     """Versao principal do ffmpeg (0 se nao der para ler, ex.: build de git)."""
     try:
-        out = subprocess.run([find_binary("ffmpeg"), "-version"], capture_output=True, text=True,
+        out = subprocess.run([find_binary("ffmpeg"), "-version"], capture_output=True, text=True, **NO_WINDOW,
                              timeout=30).stdout
     except (OSError, subprocess.TimeoutExpired):
         return 0
@@ -210,7 +224,7 @@ def probe(path: Path, timeout_s: float = 60) -> MediaInfo:
     cmd = [find_binary("ffprobe"), "-v", "error", "-print_format", "json",
            "-show_format", "-show_streams", str(path)]
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s,
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, **NO_WINDOW,
                              encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired as exc:
         raise ProcessTimeout(f"ffprobe travou em {path.name}") from exc

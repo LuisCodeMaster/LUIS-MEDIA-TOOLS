@@ -7,7 +7,7 @@ function Mostrar-Menu {
     Write-Host "                      LUIS MEDIA TOOLS                      " -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host "  [S] CRIAR / COMPILAR SLIDES DA AULA (Markdown -> HTML)" -ForegroundColor Yellow
-    Write-Host "  [A] PILOTO AUTOMATICO COMPLETO (1 Clique: Tudo-em-um)" -ForegroundColor Green
+    Write-Host "  [A] ABRIR O APP (processar aulas, slides, diagnostico)" -ForegroundColor Green
     Write-Host "  [D] DIAGNOSTICO (FFmpeg, GPU, Whisper, Ollama)" -ForegroundColor Green
     Write-Host "  [I] INSTALAR / ATUALIZAR DEPENDENCIAS" -ForegroundColor Green
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
@@ -57,7 +57,11 @@ do {
 
     switch -Regex ($opcao) {
         "^[sS]$" { .\gerar-slides.ps1; Pause }
-        "^[aA]$" { .\pipeline-completo.ps1; Pause }
+        "^[aA]$" {
+            $pythonw = Join-Path $PSScriptRoot ".venv\Scripts\pythonw.exe"
+            if (Test-Path -LiteralPath $pythonw) { Start-Process -FilePath $pythonw -ArgumentList "-m", "luismedia.gui" -WorkingDirectory $PSScriptRoot }
+            else { .\pipeline-completo.ps1; Pause }
+        }
         "^[dD]$" {
             $venvPy = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
             if (Test-Path -LiteralPath $venvPy) { & $venvPy -m luismedia doctor } else { Write-Host "Rode a opcao [I] primeiro." -ForegroundColor Yellow }

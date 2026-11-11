@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "luismedia"
-version = "0.9.1"
+version = "1.0.0"
 description = "LUIS MEDIA TOOLS - pos-producao de aulas com IA local: autocut, legendas, apostila, quiz e cortes 9:16"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,10 +14,14 @@ dependencies = [
 
 [project.optional-dependencies]
 whisper = ["faster-whisper>=1.0"]
+gui = ["PySide6>=6.6"]
 dev = ["pytest>=8", "pytest-timeout>=2.3", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
 luismedia = "luismedia.cli:main"
+
+[project.gui-scripts]
+luismedia-app = "luismedia.gui.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/luismedia"]

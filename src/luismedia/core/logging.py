@@ -37,9 +37,10 @@ def setup_logging(log_file: Path | None = None, level: int = logging.INFO) -> lo
     root.setLevel(level)
     root.handlers.clear()
 
-    console = logging.StreamHandler(sys.stderr)
-    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
-    root.addHandler(console)
+    if sys.stderr is not None:  # no app sem console (pythonw) nao existe stderr
+        console = logging.StreamHandler(sys.stderr)
+        console.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
+        root.addHandler(console)
 
     if log_file is not None:
         log_file.parent.mkdir(parents=True, exist_ok=True)

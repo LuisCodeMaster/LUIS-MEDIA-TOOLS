@@ -6,9 +6,10 @@
 .DESCRIPTION
     1. Confere o Python 3.10+ (oferece instalar via winget se faltar)
     2. Cria o ambiente isolado .venv na pasta do programa
-    3. Instala o motor luismedia com o Whisper (faster-whisper)
+    3. Instala o motor luismedia com o Whisper (faster-whisper) e o app desktop (Qt)
     4. Confere FFmpeg e Ollama (oferece instalar via winget) e baixa o modelo de IA
     5. Roda o diagnostico final (luismedia doctor)
+    6. Cria os atalhos do app na Area de Trabalho e no Menu Iniciar
 
     Pode ser rodado de novo a qualquer momento: so instala o que faltar.
 
@@ -85,9 +86,9 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
 Ok ".venv pronto"
 
 # 3. Motor luismedia ------------------------------------------------------
-Titulo "Motor LUIS MEDIA + Whisper"
+Titulo "Motor LUIS MEDIA + Whisper + app"
 & $venvPy -m pip install --upgrade pip --quiet
-& $venvPy -m pip install -e "$raiz[whisper]" --quiet
+& $venvPy -m pip install -e "$raiz[whisper,gui]" --quiet
 if ($LASTEXITCODE -ne 0) { throw "Falha ao instalar o motor. Veja a mensagem acima." }
 Ok ("luismedia " + (& $venvPy -m luismedia --version))
 
@@ -119,4 +120,30 @@ if (-not $SemIA) {
 # 6. Diagnostico ----------------------------------------------------------
 Titulo "Diagnostico"
 & $venvPy -m luismedia doctor
-Write-Host "`nPronto. De dois cliques em 'Abrir LUIS MEDIA TOOLS.cmd' (ou rode .\luis-media.ps1 para o menu)." -ForegroundColor Green
+
+# 7. Atalhos do app (sem janela de console) -------------------------------
+Titulo "Atalhos"
+$pythonw = Join-Path $raiz ".venv\Scripts\pythonw.exe"
+$icone = Join-Path $raiz "src\luismedia\gui\assets\icon.ico"
+try {
+    $shell = New-Object -ComObject WScript.Shell
+    $destinos = @(
+        [Environment]::GetFolderPath("Desktop"),
+        [Environment]::GetFolderPath("Programs")
+    )
+    foreach ($pasta in $destinos) {
+        $lnk = $shell.CreateShortcut((Join-Path $pasta "LUIS MEDIA TOOLS.lnk"))
+        $lnk.TargetPath = $pythonw
+        $lnk.Arguments = "-m luismedia.gui"
+        $lnk.WorkingDirectory = $raiz
+        $lnk.IconLocation = "$icone,0"
+        $lnk.Description = "LUIS MEDIA TOOLS - pos-producao de aulas com IA local"
+        $lnk.Save()
+    }
+    Ok "Atalho 'LUIS MEDIA TOOLS' criado na Area de Trabalho e no Menu Iniciar"
+} catch {
+    Aviso "Nao consegui criar os atalhos: $($_.Exception.Message). Use 'Abrir LUIS MEDIA TOOLS.cmd'."
+}
+
+Write-Host "`nPronto. Abra o app pelo atalho 'LUIS MEDIA TOOLS' na Area de Trabalho." -ForegroundColor Green
+if (Perguntar "Abrir o app agora?") { Start-Process -FilePath $pythonw -ArgumentList "-m", "luismedia.gui" -WorkingDirectory $raiz }
