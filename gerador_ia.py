@@ -1,21 +1,24 @@
 ﻿import sys
 import os
 import json
+import html
 import urllib.request
+
+TIMEOUT_S = 300
 
 def chamar_ollama(prompt, model="llama3.2:3b"):
     url = "http://localhost:11434/api/generate"
     data = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as response:
             res = json.loads(response.read().decode("utf-8"))
             return res.get("response", "")
     except Exception as e:
         print(f"[ERRO OLLAMA] Certifique-se de que o Ollama esta aberto: {e}")
         return None
 
-def processar_aula(dir_saida):
+def processar_aula(dir_saida, fazer_resumo=True, fazer_quiz=True):
     pasta_legendas = os.path.join(dir_saida, "1_Legendas")
     pasta_editorial = os.path.join(dir_saida, "5_Editorial")
     pasta_docs = os.path.join(dir_saida, "6_Documentos")
@@ -52,14 +55,18 @@ Com base na transcricao da aula abaixo, crie um Resumo Executivo bem estruturado
 Transcricao da aula:
 {transcricao}
 """
-    resumo_md = chamar_ollama(prompt_resumo)
+    resumo_md = chamar_ollama(prompt_resumo) if fazer_resumo else None
     if resumo_md:
+        os.makedirs(pasta_editorial, exist_ok=True)
         with open(os.path.join(pasta_editorial, "Resumo-Executivo.md"), "w", encoding="utf-8") as f:
             f.write(resumo_md)
         print("    [OK] Resumo-Executivo.md salvo em 5_Editorial.")
 
+    if not fazer_quiz:
+        return
+
     # 3. Gerar Quiz Interativo em HTML
-        template_html = '''<!DOCTYPE html>
+    template_html = '''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -145,17 +152,20 @@ ERRADA: [Mais uma resposta errada]
             botoes_html = ""
             for idx, op in enumerate(opcoes):
                 texto_op, bg_cor, borda_cor = op
-                texto_op = texto_op.replace('*', '').replace('"', '')
+                texto_op = html.escape(texto_op.replace('*', ''))
                 botoes_html += f'\n        <button onclick="this.style.background=\'{bg_cor}\'; this.style.borderColor=\'{borda_cor}\'">{letras[idx]} {texto_op}</button>'
             
-            pergunta_formatada = f"{i+1}. {q['pergunta']}" if q['pergunta'] else f"{i+1}. Pergunta gerada"
+            pergunta_formatada = f"{i+1}. {html.escape(q['pergunta'])}" if q['pergunta'] else f"{i+1}. Pergunta gerada"
             cards_html += f'\n    <div class="card">\n        <div class="pergunta">{pergunta_formatada}</div>{botoes_html}\n    </div>'
         
         quiz_final = template_html.replace("{cards_gerados}", cards_html)
+        os.makedirs(pasta_docs, exist_ok=True)
         with open(os.path.join(pasta_docs, "Quiz-Fixacao.html"), "w", encoding="utf-8") as f:
             f.write(quiz_final)
         print("    [OK] Quiz-Fixacao.html salvo em 6_Documentos.")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        processar_aula(sys.argv[1])
+        processar_aula(sys.argv[1],
+                       fazer_resumo="--sem-resumo" not in sys.argv,
+                       fazer_quiz="--sem-quiz" not in sys.argv)

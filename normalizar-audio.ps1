@@ -20,10 +20,10 @@ function Normalizar-Arquivo {
     
     Write-Host "[*] Normalizando: $(Split-Path $caminhoEntrada -Leaf)" -ForegroundColor Yellow
     
-    $cmd = "ffmpeg -y -i `"$caminhoEntrada`" -af loudnorm=I=-14:LRA=11:TP=-1.5 -ar 48000 `"$caminhoSaida`""
-    Invoke-Expression $cmd | Out-Null
-    
-    if (Test-Path $caminhoSaida) {
+    # Argumentos passados como lista: nomes de arquivo nunca sao interpretados como comando
+    & ffmpeg -hide_banner -loglevel error -y -i $caminhoEntrada -af "loudnorm=I=-14:LRA=11:TP=-1.5" -ar 48000 $caminhoSaida
+
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $caminhoSaida)) {
         Write-Host "[OK] Sucesso: $(Split-Path $caminhoSaida -Leaf)" -ForegroundColor Green
     } else {
         Write-Host "[FALHA] Nao foi possivel normalizar $caminhoEntrada" -ForegroundColor Red

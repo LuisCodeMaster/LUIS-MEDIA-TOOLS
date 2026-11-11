@@ -5,6 +5,8 @@ import re
 import subprocess
 import urllib.request
 
+TIMEOUT_S = 300
+
 def chamar_ollama(prompt, model="llama3.2:3b"):
     url = "http://localhost:11434/api/generate"
     data = json.dumps({
@@ -15,7 +17,7 @@ def chamar_ollama(prompt, model="llama3.2:3b"):
     }).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as response:
             res = json.loads(response.read().decode("utf-8"))
             return res.get("response", "")
     except Exception as e:
@@ -39,11 +41,37 @@ def srt_para_texto(caminho_srt):
     return blocos
 
 def timecode_para_segundos(tc):
-    partes = tc.split(":")
-    h = float(partes[0])
-    m = float(partes[1])
-    s = float(partes[2])
-    return h * 3600 + m * 60 + s
+    """Aceita HH:MM:SS.mmm, MM:SS.mmm, SS.mmm, virgula decimal ou numero puro."""
+    if isinstance(tc, (int, float)):
+        return float(tc)
+    partes = str(tc).strip().replace(",", ".").split(":")
+    if not 1 <= len(partes) <= 3:
+        raise ValueError(f"timecode invalido: {tc!r}")
+    total = 0.0
+    for p in partes:
+        total = total * 60 + float(p)
+    return total
+
+
+def segundos_para_srt(seg):
+    """Timecode SRT em milissegundos inteiros (59.9996 -> 00:01:00,000)."""
+    ms = max(0, round(seg * 1000))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def corte_valido(corte, duracao_video):
+    try:
+        ini = timecode_para_segundos(corte.get("inicio"))
+        fim = timecode_para_segundos(corte.get("fim"))
+    except (ValueError, TypeError, AttributeError):
+        return None
+    fim = min(fim, duracao_video) if duracao_video else fim
+    if ini < 0 or not 5 <= fim - ini <= 180:
+        return None
+    return ini, fim
 
 def identificar_melhores_momentos(blocos):
     amostra_srt = ""
@@ -85,22 +113,19 @@ def extrair_srt_parcial(caminho_srt_orig, start_sec, end_sec, caminho_srt_dest):
                 rel_in = max(0.0, s_in - start_sec)
                 rel_out = min(end_sec - start_sec, s_out - start_sec)
                 
-                h1, m1, s1 = int(rel_in // 3600), int((rel_in % 3600) // 60), rel_in % 60
-                h2, m2, s2 = int(rel_out // 3600), int((rel_out % 3600) // 60), rel_out % 60
-                
-                tc1 = f"{h1:02d}:{m1:02d}:{s1:06.3f}".replace(".", ",")
-                tc2 = f"{h2:02d}:{m2:02d}:{s2:06.3f}".replace(".", ",")
+                tc1 = segundos_para_srt(rel_in)
+                tc2 = segundos_para_srt(rel_out)
                 f.write(f"{idx}\n{tc1} --> {tc2}\n{b['txt']}\n\n")
                 idx += 1
 
-def renderizar_corte_vertical(video_orig, start_tc, end_tc, srt_corte, video_saida):
-    start_sec = timecode_para_segundos(start_tc)
-    end_sec = timecode_para_segundos(end_tc)
+def renderizar_corte_vertical(video_orig, start_sec, end_sec, srt_corte, video_saida):
     duracao = end_sec - start_sec
     if duracao <= 5:
         return
 
-    srt_escapado = srt_corte.replace("\\", "/").replace(":", "\:")
+    # O ffmpeg roda dentro da pasta do corte e recebe so o nome do .srt:
+    # evita escapar "C:", apostrofos e colchetes dentro do filtro.
+    srt_escapado = os.path.basename(srt_corte)
     # Margem inferior adaptada para 9:16 (MarginV = 80px)
     estilo = "FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,MarginV=80"
 
@@ -121,36 +146,41 @@ def renderizar_corte_vertical(video_orig, start_tc, end_tc, srt_corte, video_sai
         "-map", "[v]", "-map", "0:a",
         "-c:v", "libx264", "-preset", "faster", "-crf", "22",
         "-c:a", "aac", "-b:a", "192k",
-        video_saida
+        os.path.abspath(video_saida)
     ]
-    subprocess.run(cmd)
+    res = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(srt_corte)))
+    if res.returncode != 0:
+        print(f"    [ERRO] ffmpeg falhou ao renderizar {os.path.basename(video_saida)}")
 
 def processar_cortes(dir_saida):
     pasta_cortes = os.path.join(dir_saida, "Cortes_9x16")
     os.makedirs(pasta_cortes, exist_ok=True)
 
-    video_alvo = None
-    for arq in os.listdir(dir_saida):
-        if arq.endswith("_DINAMICO.mp4"):
-            video_alvo = os.path.join(dir_saida, arq)
-            break
-    if not video_alvo:
-        for arq in os.listdir(dir_saida):
-            if arq.endswith(".mp4") and not arq.endswith("_LEGENDADO.mp4"):
-                video_alvo = os.path.join(dir_saida, arq)
-                break
-    if not video_alvo:
-        return
-
     pasta_legendas = os.path.join(dir_saida, "1_Legendas")
     if not os.path.exists(pasta_legendas):
         return
 
-    srts = [os.path.join(pasta_legendas, f) for f in os.listdir(pasta_legendas) if f.endswith(".srt")]
-    if not srts:
-        return
+    # Cada video com a SUA legenda (antes: primeiro .mp4 + primeiro .srt, de aulas diferentes)
+    for srt_nome in sorted(f for f in os.listdir(pasta_legendas) if f.endswith(".srt")):
+        nome = os.path.splitext(srt_nome)[0]
+        candidatos = [os.path.join(dir_saida, f"{nome}_DINAMICO.mp4"), os.path.join(dir_saida, f"{nome}.mp4")]
+        video_alvo = next((c for c in candidatos if os.path.exists(c)), None)
+        if video_alvo:
+            processar_corte_video(video_alvo, os.path.join(pasta_legendas, srt_nome), pasta_cortes)
 
-    srt_principal = srts[0]
+
+def duracao_video(caminho):
+    res = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                          "-of", "default=noprint_wrappers=1:nokey=1", caminho],
+                         capture_output=True, text=True)
+    try:
+        return float(res.stdout.strip())
+    except ValueError:
+        return 0.0
+
+
+def processar_corte_video(video_alvo, srt_principal, pasta_cortes):
+    nome_video = os.path.splitext(os.path.basename(video_alvo))[0]
     blocos = srt_para_texto(srt_principal)
     if not blocos:
         return
@@ -160,20 +190,22 @@ def processar_cortes(dir_saida):
     if not melhores:
         melhores = [{"titulo": "Corte_Principal", "inicio": blocos[0]["in"], "fim": blocos[min(len(blocos)-1, 15)]["out"]}]
 
-    for i, corte in enumerate(melhores, start=1):
-        t_ini = corte.get("inicio", "00:00:00.000")
-        t_fim = corte.get("fim", "00:00:35.000")
-        titulo_limpo = re.sub(r"[^\w\s-]", "", corte.get("titulo", f"Corte_{i}")).strip().replace(" ", "_")
+    dur = duracao_video(video_alvo)
+    validos = [(c, corte_valido(c, dur)) for c in melhores]
+    validos = [(c, t) for c, t in validos if t]
+    if not validos:
+        print("    [AVISO] IA nao sugeriu cortes validos; usando o inicio da aula.")
+        validos = [({"titulo": "Corte_Principal"}, (0.0, min(dur or 45.0, 45.0)))]
+
+    for i, (corte, (s_in, s_out)) in enumerate(validos, start=1):
+        titulo_limpo = re.sub(r"[^\w\s-]", "", str(corte.get("titulo") or f"Corte_{i}")).strip().replace(" ", "_")
         
-        nome_corte = f"Corte_{i}_{titulo_limpo}.mp4"
+        nome_corte = f"{nome_video}_Corte_{i}_{titulo_limpo[:60]}.mp4"
         caminho_final_corte = os.path.join(pasta_cortes, nome_corte)
         caminho_srt_temp = os.path.join(pasta_cortes, f"temp_{i}.srt")
 
-        s_in = timecode_para_segundos(t_ini)
-        s_out = timecode_para_segundos(t_fim)
-        
         extrair_srt_parcial(srt_principal, s_in, s_out, caminho_srt_temp)
-        renderizar_corte_vertical(video_alvo, t_ini, t_fim, caminho_srt_temp, caminho_final_corte)
+        renderizar_corte_vertical(video_alvo, s_in, s_out, caminho_srt_temp, caminho_final_corte)
 
         if os.path.exists(caminho_srt_temp):
             os.remove(caminho_srt_temp)
