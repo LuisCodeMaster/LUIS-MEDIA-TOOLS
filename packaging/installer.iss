@@ -37,9 +37,10 @@ UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 OutputDir=..\dist
 OutputBaseFilename=LUIS-MEDIA-TOOLS-Setup-{#AppVersion}
-Compression=lzma2/ultra64
+Compression=lzma2/max
+; processo separado de 64 bits: o compressor de 32 bits ficava sem memoria com ~700 MB de arquivos
+LZMAUseSeparateProcess=yes
 SolidCompression=yes
-LZMANumBlockThreads=4
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
