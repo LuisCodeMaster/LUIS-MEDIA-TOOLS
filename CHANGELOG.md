@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.1] - 2026-11-11
+
+### Corrigido
+- Scripts bloqueados pelo Windows ("is not digitally signed") quando o projeto vem de um
+  ZIP baixado: o instalador agora libera os arquivos.
+- O instalador não baixa o modelo de IA de novo se ele já estiver instalado.
+
+### Novo
+- Atalhos de dois cliques: `Instalar.cmd`, `Abrir LUIS MEDIA TOOLS.cmd` e `Menu LUIS MEDIA TOOLS.cmd`.
+
 ## [0.9.0] - 2026-11-11
 
 ### Novo

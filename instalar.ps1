@@ -44,6 +44,16 @@ function Instalar-Winget([string]$id, [string]$nome) {
 Write-Host "LUIS MEDIA TOOLS - instalacao" -ForegroundColor Cyan
 Write-Host "Pasta: $raiz"
 
+# 0. Desbloqueio ----------------------------------------------------------
+# Arquivos extraidos de um ZIP baixado ficam marcados como "vindos da internet" e o
+# Windows recusa executar os .ps1 ("is not digitally signed"). Remove essa marca.
+Titulo "Desbloqueando os scripts"
+$desbloqueados = 0
+Get-ChildItem -LiteralPath $raiz -Recurse -File -Include *.ps1, *.cmd, *.py -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notlike "*\.venv\*" } |
+    ForEach-Object { Unblock-File -LiteralPath $_.FullName -ErrorAction SilentlyContinue; $desbloqueados++ }
+Ok "$desbloqueados arquivo(s) liberados"
+
 # 1. Python ---------------------------------------------------------------
 Titulo "Python"
 function Python-Base {
@@ -95,13 +105,18 @@ if (-not $SemIA) {
         [void](Instalar-Winget "Ollama.Ollama" "Ollama")
     }
     if (Tem "ollama") {
-        Write-Host "  Baixando o modelo $ModeloIA (~2 GB na primeira vez)..."
-        & ollama pull $ModeloIA
-        if ($LASTEXITCODE -eq 0) { Ok "Modelo $ModeloIA pronto" } else { Aviso "Nao consegui baixar o modelo. Abra o Ollama e rode: ollama pull $ModeloIA" }
+        $instalados = (& ollama list 2>$null) -join "`n"
+        if ($instalados -match [regex]::Escape($ModeloIA)) {
+            Ok "Modelo $ModeloIA ja instalado"
+        } else {
+            Write-Host "  Baixando o modelo $ModeloIA (~2 GB na primeira vez)..."
+            & ollama pull $ModeloIA
+            if ($LASTEXITCODE -eq 0) { Ok "Modelo $ModeloIA pronto" } else { Aviso "Nao consegui baixar o modelo. Abra o Ollama e rode: ollama pull $ModeloIA" }
+        }
     }
 }
 
 # 6. Diagnostico ----------------------------------------------------------
 Titulo "Diagnostico"
 & $venvPy -m luismedia doctor
-Write-Host "`nPronto. Abra o programa com: .\luis-media.ps1 (opcao A) ou .\pipeline-completo.ps1" -ForegroundColor Green
+Write-Host "`nPronto. De dois cliques em 'Abrir LUIS MEDIA TOOLS.cmd' (ou rode .\luis-media.ps1 para o menu)." -ForegroundColor Green

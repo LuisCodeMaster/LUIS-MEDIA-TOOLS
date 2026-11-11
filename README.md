@@ -27,14 +27,12 @@ Os vídeos originais **nunca são movidos nem apagados**. Se o processamento par
 ## Instalação (Windows)
 
 1. Baixe o projeto (botão **Code → Download ZIP**) e extraia numa pasta.
-2. Clique com o botão direito em `instalar.ps1` e escolha **Executar com o PowerShell**,
-   ou rode no terminal:
+2. Dê dois cliques em **`Instalar.cmd`**. Se o Windows mostrar um aviso de segurança, clique
+   em **Executar**.
+3. Depois, para usar, dê dois cliques em **`Abrir LUIS MEDIA TOOLS.cmd`**. O
+   **`Menu LUIS MEDIA TOOLS.cmd`** abre o menu com todas as ferramentas.
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
-   ```
-
-O instalador confere o Python 3.10+, cria um ambiente isolado (`.venv`), instala o motor e o
+O instalador libera os scripts que o Windows bloqueia em arquivos baixados, confere o Python 3.10+, cria um ambiente isolado (`.venv`), instala o motor e o
 Whisper, oferece instalar o FFmpeg e o Ollama via `winget` e baixa o modelo de IA
 (`llama3.2:3b`, cerca de 2 GB). No fim ele roda um diagnóstico.
 
@@ -45,10 +43,15 @@ como aviso no relatório.
 
 ### Interface gráfica
 
+Dois cliques em `Abrir LUIS MEDIA TOOLS.cmd`. Pelo terminal:
+
 ```powershell
 .\luis-media.ps1          # menu: [A] piloto automático, [D] diagnóstico, [I] instalar
 .\pipeline-completo.ps1   # abre direto a interface
 ```
+
+Se o PowerShell disser que o script "is not digitally signed", rode uma vez
+`Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File` na pasta (o `Instalar.cmd` já faz isso).
 
 Escolha um preset (Curso completo, Foco em redes, Pré-edição NLE), arraste os vídeos para a
 lista, escolha a pasta de destino e clique em **Iniciar**. A barra mostra o vídeo e a etapa
