@@ -1,0 +1,114 @@
+"""Adapter de transcricao com faster-whisper.
+
+Antes: codigo Python montado como string dentro do PowerShell (quebrava com apostrofo
+no caminho), modelo 'medium' recarregado a cada video, sempre CPU, e qualquer erro
+virava um print enquanto o pipeline seguia como se tivesse dado certo.
+
+Agora: modelo carregado uma vez e reutilizado; deteccao de GPU; degradacao automatica
+(CUDA sem memoria -> CPU int8 -> modelo menor); erro tipado.
+"""
+
+from __future__ import annotations
+
+import gc
+from collections.abc import Callable
+from pathlib import Path
+from threading import Lock
+
+from ..core.config import WhisperConfig, WhisperDevice
+from ..core.errors import DependencyMissing, OutOfMemory
+from ..core.logging import get_logger
+from ..core.models import Segment, Transcript, Word
+
+log = get_logger("whisper")
+ProgressFn = Callable[[float], None]
+
+
+def detect_device(pref: WhisperDevice) -> tuple[str, str]:
+    """Retorna (device, compute_type). CTranslate2 suporta CUDA; ROCm/DirectML nao."""
+    if pref is WhisperDevice.CPU:
+        return "cpu", "int8"
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", "float16"
+    except Exception:  # noqa: BLE001
+        pass
+    if pref is WhisperDevice.CUDA:
+        log.warning("CUDA pedida mas indisponivel; usando CPU")
+    return "cpu", "int8"
+
+
+def _is_oom(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(k in msg for k in ("out of memory", "cuda_error_out_of_memory",
+                                  "cublas_status_alloc_failed", "bad_alloc"))
+
+
+class WhisperEngine:
+    """Singleton por processo: carregar o 'medium' custa segundos e ~1.5 GB."""
+
+    _lock = Lock()
+
+    def __init__(self, cfg: WhisperConfig) -> None:
+        self.cfg = cfg
+        self._model = None
+        self._loaded: tuple[str, str, str] | None = None
+
+    def _load(self, model: str, device: str, compute: str):
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise DependencyMissing("faster-whisper nao instalado (pip install luismedia[whisper])") from exc
+        key = (model, device, compute)
+        if self._loaded != key:
+            self._model = None
+            gc.collect()
+            log.info("carregando modelo", extra={"model": model, "device": device, "compute": compute})
+            self._model = WhisperModel(model, device=device, compute_type=compute)
+            self._loaded = key
+        return self._model
+
+    def _attempts(self) -> list[tuple[str, str, str]]:
+        device, compute = detect_device(self.cfg.device)
+        if self.cfg.compute_type != "auto":
+            compute = self.cfg.compute_type
+        plan = [(self.cfg.model, device, compute)]
+        if device == "cuda":
+            plan.append((self.cfg.model, "cuda", "int8_float16"))  # metade da VRAM
+            plan.append((self.cfg.model, "cpu", "int8"))
+        plan += [(m, "cpu", "int8") for m in self.cfg.fallback_models]
+        return list(dict.fromkeys(plan))
+
+    def transcribe(self, audio: Path, duration: float, on_progress: ProgressFn | None = None) -> Transcript:
+        with self._lock:  # um modelo, uma transcricao por vez (evita estourar RAM/VRAM)
+            last: BaseException | None = None
+            for model_name, device, compute in self._attempts():
+                try:
+                    model = self._load(model_name, device, compute)
+                    seg_iter, info = model.transcribe(
+                        str(audio), language=self.cfg.language, beam_size=self.cfg.beam_size,
+                        word_timestamps=True, vad_filter=self.cfg.vad_filter,
+                    )
+                    segments: list[Segment] = []
+                    for s in seg_iter:  # gerador: o trabalho acontece aqui
+                        words = [Word(start=w.start, end=max(w.end, w.start), text=w.word,
+                                      probability=w.probability) for w in (s.words or [])]
+                        segments.append(Segment(start=s.start, end=max(s.end, s.start),
+                                                text=s.text, words=words))
+                        if on_progress and duration:
+                            on_progress(min(1.0, s.end / duration))
+                    return Transcript(language=info.language, duration=duration,
+                                      segments=segments, model=model_name, device=device)
+                except DependencyMissing:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    last = exc
+                    if not _is_oom(exc) and device == "cpu":
+                        raise
+                    log.warning("degradando transcricao", extra={
+                        "model": model_name, "device": device, "error": str(exc)[:300]})
+                    self._model, self._loaded = None, None
+                    gc.collect()
+            raise OutOfMemory("memoria insuficiente ate no menor modelo") from last

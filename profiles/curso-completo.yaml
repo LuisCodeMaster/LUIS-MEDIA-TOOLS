@@ -1,0 +1,8 @@
+# Curso completo: tudo ativado. Ideal para aulas gravadas que viram curso.
+profile_name: curso-completo
+autocut: {enabled: true, export_edl: true, keep_pauses_longer_than_s: 2.5}
+audio: {master: true, target_lufs: -14}
+render: {encoder: auto, hardsub: true}
+slides: {enabled: true, handout: true, handout_pdf: true}
+llm: {enabled: true, summary: true, quiz: true, clips: true, clips_count: 3}
+output: {chapters: true, zip_package: true}

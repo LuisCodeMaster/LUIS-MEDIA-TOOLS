@@ -17,3 +17,13 @@ Desktop.ini
 LUIS-MEDIA.exe
 split-temp.txt
 *-backup.ps1
+
+# Build, testes e pacote Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.part
+*.part.*
