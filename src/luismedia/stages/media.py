@@ -101,7 +101,7 @@ def render_autocut(src: MediaInfo, spans: list[Span], out: Path, *, encoder: Enc
     kept = sum(s.duration for s in spans)
     return ff.run_to_file(
         out,
-        lambda tmp: ["-i", str(src.path), "-filter_complex_script", str(script),
+        lambda tmp: ["-i", str(src.path), *ff.filter_script_args(script),
                      "-map", "[vout]", "-map", "[aout]", *ff.encoder_args(encoder, crf),
                      "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)],
         duration_hint=kept, timeout_s=max(600, kept * 6),

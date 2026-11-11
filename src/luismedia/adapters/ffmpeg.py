@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -137,13 +138,35 @@ def run_ffmpeg(
             t.join(timeout=5)
 
     if proc.returncode != 0:
+        last = next((ln for ln in reversed(stderr_tail) if ln.strip()), "")
         raise ProcessFailed(
-            f"ffmpeg saiu com codigo {proc.returncode}",
+            f"ffmpeg saiu com codigo {proc.returncode}" + (f": {last[:300]}" if last else ""),
             returncode=proc.returncode,
             detail="\n".join(stderr_tail),
         )
     if on_progress:
         on_progress(1.0)
+
+
+@cache
+def ffmpeg_major_version() -> int:
+    """Versao principal do ffmpeg (0 se nao der para ler, ex.: build de git)."""
+    try:
+        out = subprocess.run([find_binary("ffmpeg"), "-version"], capture_output=True, text=True,
+                             timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 0
+    m = re.search(r"ffmpeg version n?(\d+)\.", out)
+    return int(m.group(1)) if m else 0
+
+
+def filter_script_args(script: Path) -> list[str]:
+    """Filtergraph lido de arquivo: `-/filter_complex` no ffmpeg 7+, que removeu o
+    `-filter_complex_script`; o antigo continua no 4-6."""
+    major = ffmpeg_major_version()
+    if major == 0 or major >= 7:
+        return ["-/filter_complex", str(script)]
+    return ["-filter_complex_script", str(script)]
 
 
 def run_to_file(output: Path, build_args: Callable[[Path], Sequence[str]], **kw) -> Path:
