@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    name: Testes (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Instalar FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Instalar FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Instalar FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - name: Instalar o pacote
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Testes
+        run: pytest -q
+
+  powershell:
+    name: Sintaxe dos scripts PowerShell
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Analisar todos os .ps1 (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $falhou = $false
+          Get-ChildItem -Filter *.ps1 -Recurse | ForEach-Object {
+            $erros = $null; $tokens = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$erros)
+            if ($erros) { $falhou = $true; $erros | ForEach-Object { Write-Host "$($_.Extent.File):$($_.Extent.StartLineNumber) $($_.Message)" } }
+          }
+          if ($falhou) { exit 1 }

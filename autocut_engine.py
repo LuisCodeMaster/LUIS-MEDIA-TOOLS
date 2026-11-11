@@ -38,7 +38,10 @@ def detectar_silencios(caminho_audio, db="-32dB", duracao_minima=1.1, ignorar_si
 
     cmd_dur = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", caminho_audio]
     dur_res = subprocess.run(cmd_dur, stdout=subprocess.PIPE, text=True)
-    duracao_total = float(dur_res.stdout.strip()) if dur_res.stdout.strip() else 0.0
+    try:
+        duracao_total = float(dur_res.stdout.strip())
+    except ValueError:
+        duracao_total = 0.0
 
     if ignorar_silencio_longo:
         silencios_ignorados = [s for s in silencios if (s[1] - s[0]) >= limite_silencio]
@@ -105,7 +108,10 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
             "-avoid_negative_ts", "make_zero",
             chunk_path
         ]
-        subprocess.run(cmd_chunk)
+        res = subprocess.run(cmd_chunk)
+        if res.returncode != 0:
+            print(f"    [ERRO] ffmpeg falhou no trecho {i} ({inicio:.1f}s)")
+            continue
         if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
             arquivos_fatias.append(chunk_path)
 
@@ -126,11 +132,15 @@ def renderizar_video_cortado(caminho_video, tramos_fala, video_saida):
         "-c", "copy",
         video_saida
     ]
-    subprocess.run(cmd_concat)
+    res = subprocess.run(cmd_concat)
+    if res.returncode != 0:
+        print("    [ERRO] ffmpeg falhou ao juntar os trechos")
+        if os.path.exists(video_saida):
+            os.remove(video_saida)  # nunca deixar video pela metade com cara de pronto
 
     try:
         shutil.rmtree(pasta_chunks)
-    except:
+    except OSError:
         pass
 
 def processar(caminho_video, pasta_saida_video, pasta_saida_edl=None, ignorar_silencio_longo=False, limite_silencio=2.5):

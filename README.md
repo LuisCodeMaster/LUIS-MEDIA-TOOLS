@@ -1,28 +1,139 @@
-﻿# 🎬 LUIS MEDIA TOOLS
+﻿# LUIS MEDIA TOOLS
 
-Ecossistema local de automação audiovisual, transcrição e geração de apresentações didáticas com inteligência artificial.
+Pós-produção de aulas em vídeo com IA **100% local**. Você solta os vídeos brutos e recebe:
+o vídeo sem as pausas, as legendas, o áudio no padrão do YouTube, a apostila ilustrada em PDF,
+um quiz de fixação e cortes verticais prontos para Reels, Shorts e TikTok.
 
-## 🚀 Funcionalidades
+Nada sai do seu computador: a transcrição usa o Whisper e a IA usa o Ollama, ambos locais.
 
-- **Apresentações com IA Local (Ollama / Llama 3.2):** Criação de slides didáticos em Markdown e compilação direta para HTML5 interativo (16:9) com atalhos de navegação, timer e suporte a exportação em PDF.
-- **Transcrição Automatizada:** Extração de áudio e transcrição temporal com Whisper (.srt, .vtt, .ass, .json).
-- **Masterização Broadcast:** Normalização de áudio para streaming no padrão -14 LUFS (EBU R128) via FFmpeg.
-- **Cérebro Editorial:** Detecção automática de mudanças de cena no vídeo para extrair frames de slides e compilar apostilas ilustradas em HTML.
-- **Piloto Automático:** Pipeline unificado executável com apenas um comando.
+[![CI](https://github.com/LuisCodeMaster/LUIS-MEDIA-TOOLS/actions/workflows/ci.yml/badge.svg)](https://github.com/LuisCodeMaster/LUIS-MEDIA-TOOLS/actions/workflows/ci.yml)
 
-## 🛠️ Tecnologias Utilizadas
+## O que ele faz
 
-- PowerShell (Orquestração de scripts e automação)
-- Python 3 (Processamento de texto, templates e chamadas ao LLM)
-- FFmpeg (Tratamento de áudio e corte de vídeo)
-- OpenAI Whisper (Reconhecimento de fala local)
-- Ollama (Llama 3.2 para geração de roteiros)
+| Recurso | Resultado |
+| --- | --- |
+| **Autocut** | Remove as pausas curtas e mantém as pausas didáticas longas. Exporta uma timeline EDL para DaVinci Resolve ou Premiere |
+| **Legendas** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, sem cortar frases em "de", "que" ou "para". Inclui uma versão Shorts com 32 caracteres |
+| **Legenda queimada** | Vídeo final com a legenda embutida e fade suave |
+| **Masterização de voz** | Equalização e loudness em duas passadas, no alvo de **-14 LUFS** (padrão de YouTube e Spotify) |
+| **Slides e apostila** | Detecta cada troca de slide com o instante exato e monta uma apostila em HTML e PDF com o slide e o que foi falado sobre ele |
+| **Resumo e quiz (IA)** | Resumo executivo em Markdown e quiz interativo em HTML com placar |
+| **Cortes 9:16 (IA)** | A IA escolhe os trechos mais fortes e gera vídeos 1080x1920 com fundo desfocado e legenda grande |
+| **Entregáveis** | Capítulos do YouTube, `Entregavel.zip` e um relatório do que deu certo em cada vídeo |
 
-## 💻 Como Usar
+Os vídeos originais **nunca são movidos nem apagados**. Se o processamento parar no meio
+(queda de energia, cancelamento), basta rodar de novo: ele continua de onde parou.
 
-1. Gerar Apresentação:
-   .\gerar-slides.ps1
+## Instalação (Windows)
 
-2. Executar Pipeline de Produção Completo:
-   Coloque os vídeos em entrada/ e execute:
-   .\pipeline-completo.ps1
+1. Baixe o projeto (botão **Code → Download ZIP**) e extraia numa pasta.
+2. Clique com o botão direito em `instalar.ps1` e escolha **Executar com o PowerShell**,
+   ou rode no terminal:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
+   ```
+
+O instalador confere o Python 3.10+, cria um ambiente isolado (`.venv`), instala o motor e o
+Whisper, oferece instalar o FFmpeg e o Ollama via `winget` e baixa o modelo de IA
+(`llama3.2:3b`, cerca de 2 GB). No fim ele roda um diagnóstico.
+
+A IA é opcional. Sem o Ollama, tudo funciona, exceto resumo, quiz e cortes 9:16, que aparecem
+como aviso no relatório.
+
+## Como usar
+
+### Interface gráfica
+
+```powershell
+.\luis-media.ps1          # menu: [A] piloto automático, [D] diagnóstico, [I] instalar
+.\pipeline-completo.ps1   # abre direto a interface
+```
+
+Escolha um preset (Curso completo, Foco em redes, Pré-edição NLE), arraste os vídeos para a
+lista, escolha a pasta de destino e clique em **Iniciar**. A barra mostra o vídeo e a etapa
+em andamento, e **Cancelar** interrompe sem perder o que já ficou pronto.
+
+### Linha de comando (Windows, Linux e macOS)
+
+```bash
+luismedia doctor                                    # confere FFmpeg, GPU, Whisper, Ollama e navegador
+luismedia run aula1.mp4 aula2.mp4 -o saida/         # processa com o perfil padrao
+luismedia --profile profiles/redes-sociais.yaml run entrada/Aula1 -o saida/
+luismedia --profile meu-perfil.yaml config          # mostra a configuracao final validada
+```
+
+`run --json-events` emite o progresso em JSON Lines, que é o que a interface gráfica usa.
+
+### Perfis
+
+Perfis prontos em `profiles/`:
+
+- `curso-completo.yaml`: tudo ativado.
+- `redes-sociais.yaml`: vídeo enxuto, legenda queimada e 5 cortes 9:16. Sem apostila.
+- `pre-edicao-nle.yaml`: autocut, EDL e legendas, sem IA, para terminar no editor.
+
+Qualquer opção pode ser ajustada. Uma chave escrita errado gera erro claro em vez de ser
+ignorada. Também dá para sobrescrever por variável de ambiente, por exemplo
+`LUISMEDIA_LLM__MODEL=qwen2.5:3b`. Veja todas as opções em
+[`src/luismedia/core/config.py`](src/luismedia/core/config.py).
+
+## Estrutura da saída
+
+```text
+saida/
+├── capitulos-youtube.txt      # capítulos somando os vídeos do lote
+├── Entregavel.zip             # legendas, áudio, slides e documentos (sem os vídeos)
+├── relatorio.json             # o que funcionou, avisos e falhas por vídeo
+├── job.log.jsonl              # log detalhado (para suporte)
+└── aula 01/
+    ├── aula 01_DINAMICO.mp4   # sem pausas
+    ├── aula 01_LEGENDADO.mp4  # com legenda queimada
+    ├── aula 01.edl            # timeline para o editor
+    ├── legendas/              # .srt .vtt .ass, _shorts.srt, transcript.json
+    ├── audio/                 # bruto e masterizado (-14 LUFS)
+    ├── slides/                # frames + slides.json com o instante de cada um
+    ├── documentos/            # Apostila.html/.pdf, Resumo-Executivo.md, Quiz-Fixacao.html
+    └── cortes/                # vídeos 9:16
+```
+
+## Requisitos
+
+- Windows 10/11 para a interface gráfica. O motor (CLI) também roda em Linux e macOS.
+- Python 3.10+ (o `instalar.ps1` cuida disso) e FFmpeg.
+- 8 GB de RAM recomendados. Uma GPU NVIDIA acelera o Whisper. Placas AMD, NVIDIA e Intel
+  aceleram a codificação do vídeo, e o modo **Automático** testa a placa e escolhe sozinho.
+- Ollama, opcional, para os recursos de IA.
+- Edge ou Chrome para gerar o PDF da apostila (o Edge já vem no Windows).
+
+## Arquitetura
+
+```text
+Interfaces (GUI PowerShell, CLI)  ->  Pipeline (etapas, checkpoint, eventos)
+                                  ->  Core (config, schemas, legendas, erros)
+                                  ->  Adapters (FFmpeg, Whisper, Ollama, PDF)
+```
+
+Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+Os scripts `.ps1` do menu (opções 1 a 9) e os `.py` da raiz são a versão anterior. Eles
+continuam disponíveis e corrigidos enquanto a migração para o motor novo termina.
+
+## Desenvolvimento
+
+```bash
+python -m pip install -e ".[dev]"
+ruff check src tests
+pytest -q            # 45 testes; os de integração geram vídeos sintéticos com o FFmpeg
+```
+
+Versão portátil para Windows, com o motor empacotado e o FFmpeg embutido:
+
+```powershell
+.\packaging\build-windows.ps1 -FFmpegDir C:\ffmpeg\bin
+```
+
+## Licença
+
+Copyright (c) 2026 LuisCodeMaster. Todos os direitos reservados. Veja [LICENSE](LICENSE) e os
+componentes de terceiros em [THIRD_PARTY.md](THIRD_PARTY.md).

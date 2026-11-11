@@ -1,3 +1,6 @@
+# Roda sempre a partir da pasta do programa (os scripts sao chamados por caminho relativo)
+Set-Location -LiteralPath $PSScriptRoot
+
 function Mostrar-Menu {
     Clear-Host
     Write-Host "============================================================" -ForegroundColor Cyan
@@ -5,6 +8,8 @@ function Mostrar-Menu {
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host "  [S] CRIAR / COMPILAR SLIDES DA AULA (Markdown -> HTML)" -ForegroundColor Yellow
     Write-Host "  [A] PILOTO AUTOMATICO COMPLETO (1 Clique: Tudo-em-um)" -ForegroundColor Green
+    Write-Host "  [D] DIAGNOSTICO (FFmpeg, GPU, Whisper, Ollama)" -ForegroundColor Green
+    Write-Host "  [I] INSTALAR / ATUALIZAR DEPENDENCIAS" -ForegroundColor Green
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  MODULOS INDIVIDUAIS (POS-PRODUCAO):" -ForegroundColor DarkGray
     Write-Host "   1. Processar Aulas em Lote (Transcricao + Legendas)" -ForegroundColor White
@@ -30,6 +35,8 @@ function Mostrar-Ajuda {
     Write-Host ""
     Write-Host "[S] Slides: Converte roteiro markdown em apresentacao HTML interativa." -ForegroundColor Yellow
     Write-Host "[A] Piloto Automatico: Roda da transcricao ao ZIP final automaticamente." -ForegroundColor Green
+    Write-Host "[D] Diagnostico: Confere se FFmpeg, GPU, Whisper e Ollama estao prontos." -ForegroundColor Green
+    Write-Host "[I] Instalar: Prepara Python, motor, FFmpeg e modelo de IA (rode uma vez)." -ForegroundColor Green
     Write-Host "[1] Processar Aulas: Transcreve e legenda arquivos da pasta entrada." -ForegroundColor Yellow
     Write-Host "[2] Regenerar Legendas: Recalcula quebras de texto pelo .json." -ForegroundColor Yellow
     Write-Host "[3] Transcrever Unico: Transcreve apenas 1 arquivo pontual." -ForegroundColor Yellow
@@ -46,11 +53,17 @@ function Mostrar-Ajuda {
 
 do {
     Mostrar-Menu
-    $opcao = Read-Host "Escolha uma opcao [S, A, 0-10]"
+    $opcao = Read-Host "Escolha uma opcao [S, A, D, I, 0-10]"
 
     switch -Regex ($opcao) {
         "^[sS]$" { .\gerar-slides.ps1; Pause }
         "^[aA]$" { .\pipeline-completo.ps1; Pause }
+        "^[dD]$" {
+            $venvPy = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+            if (Test-Path -LiteralPath $venvPy) { & $venvPy -m luismedia doctor } else { Write-Host "Rode a opcao [I] primeiro." -ForegroundColor Yellow }
+            Pause
+        }
+        "^[iI]$" { .\instalar.ps1; Pause }
         "^1$"    { .\processar-aula.ps1; Pause }
         "^2$"    {
             $json = Read-Host "Digite o caminho do arquivo .json"

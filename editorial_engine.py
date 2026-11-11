@@ -1,4 +1,5 @@
 import sys, os, json, re
+from html import escape
 
 def format_time(seconds):
     m = int(seconds // 60)
@@ -13,7 +14,7 @@ def processar_editorial(pasta_aula):
     if not os.path.exists(pasta_docs):
         os.makedirs(pasta_docs, exist_ok=True)
 
-    nome_aula = os.path.basename(os.path.normpath(pasta_aula))
+    nome_aula = escape(os.path.basename(os.path.normpath(pasta_aula)))
     
     # Busca arquivos de imagem extraidos
     imagens = []
@@ -40,7 +41,7 @@ def processar_editorial(pasta_aula):
                         for seg in dados.get("segments", []):
                             segmentos.append({
                                 "start": seg.get("start", 0),
-                                "text": seg.get("text", "").strip()
+                                "text": escape(seg.get("text", "").strip())
                             })
                 except Exception as e:
                     print(f"[AVISO] Erro ao ler {f}: {e}")

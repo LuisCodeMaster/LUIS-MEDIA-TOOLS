@@ -162,12 +162,15 @@ function Global:Obter-DuracaoVideo([string]$caminhoArquivo) {
     return ""
 }
 
-$raiz = "C:\Users\ferna\Desktop\LUIS-MEDIA-TOOLS"
+# Pasta do proprio programa (funciona como .ps1 e quando compilado em .exe)
+$raiz = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($raiz)) { $raiz = [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\') }
 $configFile = Join-Path $raiz "config_presets.json"
 
 $cfg = @{
     PresetIndex = 0; AutoCut = $true; EDL = $true; Hardsub =$true
     Slides = $true; PDF =$true; IA = $true; Resumo =$true; Quiz = $true; Cortes =$true; QtdCortes = 3
+    Audio = $true; Encoder = 0; Pausa = 25
 }
 
 if (Test-Path $configFile) {
@@ -350,7 +353,7 @@ $chkEDL = New-Object System.Windows.Forms.CheckBox; $chkEDL.Location = New-Objec
 $chkEDL.Text = "Exportar Timeline EDL (DaVinci Resolve / Premiere)"; $chkEDL.Checked = $cfg.EDL; $tabVideo.Controls.Add($chkEDL)
 
 $chkAudioBroadcast = New-Object System.Windows.Forms.CheckBox; $chkAudioBroadcast.Location = New-Object System.Drawing.Point(40, 82); $chkAudioBroadcast.Size = New-Object System.Drawing.Size(480, 24)
-$chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + Compressor + R128)"; $chkAudioBroadcast.Checked = $true; $tabVideo.Controls.Add($chkAudioBroadcast)
+$chkAudioBroadcast.Text = "Masterização de Voz de Estúdio (Equalização + R128 -14 LUFS)"; $chkAudioBroadcast.Checked = [bool]$cfg.Audio; $tabVideo.Controls.Add($chkAudioBroadcast)
 
 $chkHardsubHoriz = New-Object System.Windows.Forms.CheckBox; $chkHardsubHoriz.Location = New-Object System.Drawing.Point(40, 112); $chkHardsubHoriz.Size = New-Object System.Drawing.Size(480, 24)
 $chkHardsubHoriz.Text = "Gerar Versão Horizontal com Legenda Fluida na Borda"; $chkHardsubHoriz.Checked = $cfg.Hardsub; $tabVideo.Controls.Add($chkHardsubHoriz)
@@ -368,12 +371,13 @@ $cmbEncoder.Size = New-Object System.Drawing.Size(335, 24)
 $cmbEncoder.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
 $cmbEncoder.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $cmbEncoder.Items.AddRange(@(
+    "🔍 Automático (testa a placa e escolhe o melhor)",
     "⚡ GPU AMD (AMF - Radeon Vega / Ryzen 5600GT)",
     "🖥️ Processador CPU (x264 - Compatibilidade Total)",
     "🟢 GPU NVIDIA (NVENC - GeForce)",
     "🔷 GPU Intel (QSV - QuickSync)"
 ))
-$cmbEncoder.SelectedIndex = 0
+$cmbEncoder.SelectedIndex = [Math]::Min([Math]::Max(0, [int]$cfg.Encoder), 4)
 $tabVideo.Controls.Add($cmbEncoder)
 
 $tabDidatico = New-Object System.Windows.Forms.TabPage; $tabDidatico.Text = "Material & IA"
@@ -402,6 +406,20 @@ $tabControl.TabPages.Add($tabRedes)
 $chkCortes = New-Object System.Windows.Forms.CheckBox; $chkCortes.Location = New-Object System.Drawing.Point(20, 20); $chkCortes.Size = New-Object System.Drawing.Size(510, 25)
 $chkCortes.Text = "Ativar Curadoria Viral e Cortes 9:16"; $chkCortes.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $chkCortes.Checked = $cfg.Cortes; $tabRedes.Controls.Add($chkCortes)
+
+$lblQtdCortes = New-Object System.Windows.Forms.Label
+$lblQtdCortes.Text = "Quantidade de cortes por vídeo:"; $lblQtdCortes.Location = New-Object System.Drawing.Point(40, 58); $lblQtdCortes.Size = New-Object System.Drawing.Size(200, 22)
+$tabRedes.Controls.Add($lblQtdCortes)
+$numCortes = New-Object System.Windows.Forms.NumericUpDown
+$numCortes.Location = New-Object System.Drawing.Point(245, 55); $numCortes.Size = New-Object System.Drawing.Size(60, 24)
+$numCortes.Minimum = 1; $numCortes.Maximum = 10; $numCortes.Value = [Math]::Min([Math]::Max(1, [int]$cfg.QtdCortes), 10)
+$tabRedes.Controls.Add($numCortes)
+
+$lblCortesInfo = New-Object System.Windows.Forms.Label
+$lblCortesInfo.Text = "A IA local escolhe os trechos mais fortes (20-60 s) e gera vídeos 1080x1920 com legenda grande."
+$lblCortesInfo.Location = New-Object System.Drawing.Point(40, 92); $lblCortesInfo.Size = New-Object System.Drawing.Size(500, 40)
+$lblCortesInfo.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+$tabRedes.Controls.Add($lblCortesInfo)
 
 $cmbPresets.Add_SelectedIndexChanged({
     switch ($cmbPresets.SelectedIndex) {
@@ -482,9 +500,9 @@ $lblPausa.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 240)
 $trackPausa = New-Object System.Windows.Forms.TrackBar
 $trackPausa.Location = New-Object System.Drawing.Point(75, 500)
 $trackPausa.Size = New-Object System.Drawing.Size(115, 30)
-$trackPausa.Minimum = 15; $trackPausa.Maximum = 50; $trackPausa.Value = 25; $trackPausa.TickFrequency = 5
+$trackPausa.Minimum = 15; $trackPausa.Maximum = 50; $trackPausa.Value = [Math]::Min([Math]::Max(15, [int]$cfg.Pausa), 50); $trackPausa.TickFrequency = 5
 $lblPausaVal = New-Object System.Windows.Forms.Label
-$lblPausaVal.Text = "2.5s"; $lblPausaVal.Location = New-Object System.Drawing.Point(195, 506); $lblPausaVal.AutoSize = $true
+$lblPausaVal.Text = (($trackPausa.Value / 10.0).ToString("0.0") + "s"); $lblPausaVal.Location = New-Object System.Drawing.Point(195, 506); $lblPausaVal.AutoSize = $true
 $lblPausaVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
 $lblPausaVal.ForeColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
 $trackPausa.Add_ValueChanged({ $lblPausaVal.Text = (($trackPausa.Value / 10.0).ToString("0.0") + "s") })
@@ -510,7 +528,7 @@ $trackOpacidade.Add_ValueChanged({
 })
 
 $btnCancelar = New-Object System.Windows.Forms.Button
-$btnCancelar.Text = "Cancelar"
+$btnCancelar.Text = "Fechar"
 $btnCancelar.Location = New-Object System.Drawing.Point(250, 498)
 $btnCancelar.Size = New-Object System.Drawing.Size(95, 74)
 $btnCancelar.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
@@ -520,7 +538,16 @@ $btnCancelar.BackColor = [System.Drawing.Color]::FromArgb(38, 41, 54)
 $btnCancelar.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 235)
 $btnCancelar.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $btnCancelar.Cursor = [System.Windows.Forms.Cursors]::Hand
-$btnCancelar.Add_Click({ $form.Close() })
+$global:procPipeline = $null
+$btnCancelar.Add_Click({
+    if ($global:procPipeline) {
+        # Durante o processamento o botao cancela; o que ja ficou pronto e mantido (checkpoint)
+        $global:cancelarPipeline = $true
+        $btnCancelar.Text = "Cancelando..."
+    } else {
+        $form.Close()
+    }
+})
 $form.Controls.Add($btnCancelar)
 
 $btnIniciar = New-Object System.Windows.Forms.Button
@@ -554,23 +581,18 @@ $btnIniciar.Add_Click({
     }
 
     $btnIniciar.Enabled = $false; $btnIniciar.Text = [char]0x23F3 + " PROCESSANDO..."
+    $btnCancelar.Text = "Cancelar"
     Atualizar-ProgressoUI 2 "Iniciando esteira de processamento..."
 
-    Executar-MotorPipeline
-
-    Atualizar-ProgressoUI 100 "Concluído!"
-
-    $opcao = [System.Windows.Forms.MessageBox]::Show($form,
-        "Todos os vídeos foram processados com sucesso!`n`nDeseja fechar o programa?",
-        "Processamento Concluído",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Question
-    )
-
-    if ($opcao -eq [System.Windows.Forms.DialogResult]::Yes) { $form.Close(); 
-    } else {
+    try {
+        Executar-MotorPipeline
+    } catch {
+        [void][System.Windows.Forms.MessageBox]::Show($form, "Erro inesperado: $($_.Exception.Message)", "Erro",
+            [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    } finally {
+        $global:procPipeline = $null
         $btnIniciar.Enabled = $true; $btnIniciar.Text = [char]0x25B6 + " INICIAR PROCESSAMENTO"
-        Atualizar-ProgressoUI 0 "Pronto para novo processamento."
+        $btnCancelar.Text = "Fechar"
     }
 })
 
@@ -609,273 +631,197 @@ $form.Add_Shown({
 
 
 
+function Global:Encontrar-Motor {
+    # Ordem: executavel empacotado > ambiente virtual (instalar.ps1) > launcher py > python do PATH
+    $exe = Join-Path $raiz "motor\luismedia.exe"
+    if (Test-Path -LiteralPath $exe) { return @($exe) }
+    $venv = Join-Path $raiz ".venv\Scripts\python.exe"
+    if (Test-Path -LiteralPath $venv) { return @($venv, "-m", "luismedia") }
+    if (Get-Command py -ErrorAction SilentlyContinue) { return @("py", "-3", "-m", "luismedia") }
+    if (Get-Command python -ErrorAction SilentlyContinue) { return @("python", "-m", "luismedia") }
+    return $null
+}
+
+function Global:Montar-Perfil {
+    $encoders = @("auto", "h264_amf", "libx264", "h264_nvenc", "h264_qsv")
+    $usarIA = $chkIA.Checked -or $chkCortes.Checked
+    return [ordered]@{
+        profile_name = "gui"
+        autocut = [ordered]@{
+            enabled = $chkAutoCut.Checked
+            export_edl = $chkEDL.Checked
+            keep_pauses_longer_than_s = [double]($trackPausa.Value / 10.0)
+        }
+        audio = [ordered]@{ master = $chkAudioBroadcast.Checked; target_lufs = -14 }
+        render = [ordered]@{ encoder = $encoders[[Math]::Max(0, $cmbEncoder.SelectedIndex)]; hardsub = $chkHardsubHoriz.Checked }
+        slides = [ordered]@{ enabled = $chkSlides.Checked; handout = $true; handout_pdf = $chkPDF.Checked }
+        llm = [ordered]@{
+            enabled = $usarIA
+            summary = ($chkIA.Checked -and $chkResumo.Checked)
+            quiz = ($chkIA.Checked -and $chkQuiz.Checked)
+            clips = $chkCortes.Checked
+            clips_count = [int]$numCortes.Value
+        }
+        output = [ordered]@{ chapters = $true; zip_package = $true }
+    }
+}
+
+function Global:Nome-Etapa([string]$etapa) {
+    $nomes = @{
+        autocut = "Cortando pausas"; audio = "Extraindo audio"; transcricao = "Transcrevendo (Whisper)"
+        masterizacao = "Masterizando voz"; hardsub = "Queimando legenda"; ia = "IA local"
+        resumo = "Gerando resumo"; quiz = "Gerando quiz"; cortes = "Gerando cortes 9:16"
+        slides = "Detectando slides"; apostila = "Montando apostila"; validacao = "Validando video"
+    }
+    if ($nomes.ContainsKey($etapa)) { return $nomes[$etapa] }
+    return $etapa
+}
+
+function Global:Parar-Processo($proc) {
+    if ($proc -and -not $proc.HasExited) {
+        # Mata a arvore inteira (python + ffmpeg filhos), sem deixar processo zumbi
+        & taskkill /F /T /PID $proc.Id 2>$null | Out-Null
+    }
+}
+
 function Global:Executar-MotorPipeline {
-# Garante pasta de destino padrao caso o campo tenha ficado em branco
-if ([string]::IsNullOrWhiteSpace($txtDestino.Text)) {
-    $txtDestino.Text = Join-Path $raiz "saida\$nomeAula"
-}
-if (-not (Test-Path -LiteralPath $txtDestino.Text.Trim())) {
-    [void](New-Item -Path $txtDestino.Text.Trim() -ItemType Directory -Force)
-}
+    $global:cancelarPipeline = $false
 
-# [CORREÇÃO DO MOTOR]
-$videos = @()
-foreach ($v in $global:videosSelecionados) {
-    if (Test-Path $v) {
-        $videos += (Get-Item $v)
+    if ([string]::IsNullOrWhiteSpace($txtDestino.Text)) {
+        $txtDestino.Text = Join-Path $raiz "saida\$nomeAula"
     }
-}
-Write-Host "`n[START] Pipeline iniciando com $($videos.Count) vídeo(s)..." -ForegroundColor Cyan
+    $dirSaida = $txtDestino.Text.Trim()
+    if (-not (Test-Path -LiteralPath $dirSaida)) {
+        [void](New-Item -Path $dirSaida -ItemType Directory -Force)
+    }
 
-$novoCfg = [PSCustomObject]@{
-    PresetIndex = $cmbPresets.SelectedIndex; AutoCut = $chkAutoCut.Checked; EDL = $chkEDL.Checked
-    Hardsub = $chkHardsubHoriz.Checked; Slides = $chkSlides.Checked; PDF = $chkPDF.Checked
-    IA = $chkIA.Checked; Resumo = $chkResumo.Checked; Quiz = $chkQuiz.Checked; Cortes = $chkCortes.Checked
-}
-$novoCfg | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
+    # Salva as escolhas da interface para a proxima vez
+    $novoCfg = [ordered]@{
+        PresetIndex = $cmbPresets.SelectedIndex; AutoCut = $chkAutoCut.Checked; EDL = $chkEDL.Checked
+        Audio = $chkAudioBroadcast.Checked; Hardsub = $chkHardsubHoriz.Checked; Slides = $chkSlides.Checked
+        PDF = $chkPDF.Checked; IA = $chkIA.Checked; Resumo = $chkResumo.Checked; Quiz = $chkQuiz.Checked
+        Cortes = $chkCortes.Checked; QtdCortes = [int]$numCortes.Value; Encoder = $cmbEncoder.SelectedIndex
+        Pausa = $trackPausa.Value
+    }
+    try { $novoCfg | ConvertTo-Json | Set-Content -LiteralPath $configFile -Encoding UTF8 } catch { }
 
-$dirSaida       = $txtDestino.Text.Trim()
-$fazerAutoCut   = $chkAutoCut.Checked
-$fazerEDL       = $chkEDL.Checked
-$fazerHardsub   = $chkHardsubHoriz.Checked
-$fazerSlides    = $chkSlides.Checked
-$fazerPDF       = $chkPDF.Checked
-$fazerIA        = $chkIA.Checked
-$fazerCortes    = $chkCortes.Checked
+    $motor = Encontrar-Motor
+    if (-not $motor) {
+        [void][System.Windows.Forms.MessageBox]::Show($form,
+            "Motor nao encontrado.`n`nRode o instalar.ps1 (na pasta do LUIS MEDIA TOOLS) uma vez e tente de novo.",
+            "Instalacao incompleta", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        return
+    }
+    $pyExe = $motor[0]
+    $pyPre = @(); if ($motor.Count -gt 1) { $pyPre = $motor[1..($motor.Count - 1)] }
 
-if (-not (Test-Path $dirSaida)) { New-Item -ItemType Directory -Path $dirSaida -Force | Out-Null }
+    # Confere se o motor esta instalado antes de comecar
+    & $pyExe @pyPre --version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        [void][System.Windows.Forms.MessageBox]::Show($form,
+            "O motor LUIS MEDIA (luismedia) nao esta instalado neste Python.`n`nRode o instalar.ps1 uma vez e tente de novo.",
+            "Instalacao incompleta", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        return
+    }
 
-$pastas = @{
-    "1" = Join-Path $dirSaida "1_Legendas"
-    "2" = Join-Path $dirSaida "2_Audio_Bruto"
-    "3" = Join-Path $dirSaida "3_Audio_Tratado"
-    "4" = Join-Path $dirSaida "4_Slides_Extraidos"
-    "5" = Join-Path $dirSaida "5_Editorial"
-    "6" = Join-Path $dirSaida "6_Documentos"
-    "7" = Join-Path $dirSaida "7_Cortes_Timeline"
-}
-foreach ($p in $pastas.Values) {
-    if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
-}
-# 
-if (-not $videos -or $videos.Count -eq 0) {
-    $videos = Get-ChildItem -Path $dirEntrada -Include "*.mp4","*.mkv","*.mov" -Recurse | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
-} else {
-    if ($videos[0].FullName) { $dirEntrada = Split-Path $videos[0].FullName -Parent }
-}
-if ($videos.Count -eq 0) {
-    $videos = Get-ChildItem -Path $dirSaida -Include "*.mp4","*.mkv","*.mov" | Where-Object { $_.Name -notmatch "(_DINAMICO|_sem_silencio|_LEGENDADO)" } | Sort-Object Name
-    if ($videos.Count -eq 0) { exit 0 }
-}
+    $perfilPath = Join-Path ([System.IO.Path]::GetTempPath()) ("luismedia-perfil-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $json = (Montar-Perfil) | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($perfilPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 
-$minutagemArquivo = Join-Path $pastas["6"] "capitulos-youtube.txt"
-$tempoAcumulado = 0.0
-$listaCapitulos = @()
+    function Citar([string]$s) { return '"' + ($s -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+    $argsLista = @($pyPre) + @("--profile", $perfilPath, "run")
+    $argsLista += $global:videosSelecionados
+    $argsLista += @("-o", $dirSaida, "--json-events")
 
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $pyExe
+    $psi.Arguments = (($argsLista | ForEach-Object { Citar ([string]$_) }) -join " ")
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
+    $psi.EnvironmentVariables["PYTHONUTF8"] = "1"
 
-# =======================================================
-# FILTRO DE SELEÇÃO PROFISSIONAL
-# =======================================================
-if ($global:videosSelecionados -ne $null) {
-    if ($global:videosSelecionados.Count -gt 0) {
-        # Filtro desativado: a lista já vem validada e com caminhos absolutos do Drag & Drop
-        Write-Host "`n=======================================================" -ForegroundColor Cyan
-        Write-Host " [MODO SELETIVO] Processando $($videos.Count) vídeo(s):" -ForegroundColor Green
-        $videos | ForEach-Object { Write-Host "   -> $($_.Name)" -ForegroundColor Green }
-        Write-Host "=======================================================`n" -ForegroundColor Cyan
+    Write-Host "`n[START] $($global:videosSelecionados.Count) video(s) -> $dirSaida" -ForegroundColor Cyan
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $global:procPipeline = $proc
+    $erroTask = $proc.StandardError.ReadToEndAsync()   # le o stderr em paralelo (evita travar o buffer)
+    $linhaTask = $proc.StandardOutput.ReadLineAsync()
+
+    # Laco de leitura que mantem a janela responsiva (DoEvents a cada 50 ms)
+    while ($true) {
+        if ($global:cancelarPipeline) { Parar-Processo $proc; break }
+        if ($linhaTask.IsCompleted) {
+            $linha = $linhaTask.Result
+            if ($null -eq $linha) { break }   # fim do stdout
+            if ($linha.StartsWith("{")) {
+                try {
+                    $evt = $linha | ConvertFrom-Json
+                    $total = [Math]::Max(1, [int]$evt.total)
+                    $idx = [Math]::Max(1, [int]$evt.index)
+                    # Progresso geral = videos anteriores + fracao das etapas deste video
+                    $ordem = @("validacao", "autocut", "audio", "transcricao", "masterizacao", "hardsub", "ia", "resumo", "quiz", "cortes", "slides", "apostila")
+                    $pos = [Math]::Max(0, [array]::IndexOf($ordem, [string]$evt.stage))
+                    $fracao = ($pos + [Math]::Min(1.0, [double]$evt.progress)) / $ordem.Count
+                    $pct = [int](100 * (($idx - 1) + $fracao) / $total)
+                    $txt = "[{0}/{1}] {2} - {3}" -f $idx, $total, $evt.video, (Nome-Etapa $evt.stage)
+                    if ($evt.status -eq "running" -and [double]$evt.progress -gt 0) { $txt += (" ({0:P0})" -f [double]$evt.progress) }
+                    if ($evt.status -eq "failed") { $txt += " - FALHOU: " + $evt.message; Write-Host "    [ERRO] $($evt.stage): $($evt.message)" -ForegroundColor Red }
+                    elseif ($evt.status -eq "done") { Write-Host "    [OK] $($evt.video) - $(Nome-Etapa $evt.stage)" -ForegroundColor Green }
+                    Atualizar-ProgressoUI $pct $txt
+                } catch { }
+            } else {
+                Write-Host $linha
+            }
+            $linhaTask = $proc.StandardOutput.ReadLineAsync()
+        } else {
+            [System.Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    if (-not $proc.HasExited) { [void]$proc.WaitForExit(10000) }
+    $global:procPipeline = $null
+    Remove-Item -LiteralPath $perfilPath -Force -ErrorAction SilentlyContinue
+
+    $logErro = $erroTask.Result
+    if ($logErro) { Write-Host $logErro -ForegroundColor DarkGray }
+
+    if ($global:cancelarPipeline) {
+        Atualizar-ProgressoUI 0 "Cancelado. O que ja ficou pronto foi mantido; rodar de novo continua de onde parou."
+        return
+    }
+
+    # Relatorio honesto: le o que cada video realmente gerou
+    $relatorio = Join-Path $dirSaida "relatorio.json"
+    $ok = 0; $falhas = @(); $avisos = 0
+    if (Test-Path -LiteralPath $relatorio) {
+        $itens = Get-Content -LiteralPath $relatorio -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($r in $itens) {
+            if ($r.ok) { $ok++ } else { $falhas += ("- {0}: {1}" -f [System.IO.Path]::GetFileName($r.source), $r.error) }
+            $avisos += @($r.warnings).Count
+        }
+    }
+
+    Atualizar-ProgressoUI 100 ("Concluido: {0} ok, {1} com falha." -f $ok, $falhas.Count)
+    try { [System.Console]::Beep(1000, 300); [System.Console]::Beep(1500, 400) } catch { }
+
+    if ($falhas.Count -eq 0 -and $ok -gt 0) {
+        $msg = "$ok video(s) processado(s) com sucesso."
+        if ($avisos -gt 0) { $msg += "`n$avisos aviso(s): veja relatorio.json na pasta de saida." }
+        $icone = [System.Windows.Forms.MessageBoxIcon]::Information
     } else {
-        Write-Host "`n[AVISO] Nenhum vídeo marcado na aba de seleção. Operação cancelada." -ForegroundColor Red
-        exit 0
+        $msg = "$ok video(s) ok e $($falhas.Count) com falha:`n`n" + ($falhas -join "`n")
+        if ($falhas.Count -eq 0) { $msg = "Nada foi processado. Veja o log (job.log.jsonl) na pasta de saida.`n`n$logErro" }
+        $icone = [System.Windows.Forms.MessageBoxIcon]::Warning
     }
-}
-# =======================================================
-
-foreach ($video in $videos) {
-    Write-Host "`n>>> INICIANDO PROCESSAMENTO: $($video.Name) <<<" -ForegroundColor Magenta
-
-    $nome = $video.BaseName
-    $dirTempChunk = Join-Path $dirSaida $nome
-    if (-not (Test-Path $dirTempChunk)) { New-Item -ItemType Directory -Path $dirTempChunk -Force | Out-Null }
-
-    $videoAlvo = $video.FullName
-    if ($fazerAutoCut) {
-        $videoDinamico = Join-Path $dirSaida "${nome}_DINAMICO.mp4"
-        if (-not (Test-Path $videoDinamico)) {
-            & python (Join-Path $raiz "autocut_engine.py") $video.FullName $dirSaida "--limite" $global:limitePausa
-            if ($fazerEDL) {
-                Get-ChildItem -Path $dirSaida -Filter "${nome}_timeline_cortes.edl" | Move-Item -Destination $pastas["7"] -Force -ErrorAction SilentlyContinue
-            }
-        }
-        if (Test-Path $videoDinamico) { $videoAlvo = $videoDinamico }
-    }
-
-    $duracaoStr = (& ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $videoAlvo)
-    $duracao = 0.0
-    [double]::TryParse($duracaoStr, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$duracao) | Out-Null
-    $horas = [math]::Floor($tempoAcumulado / 3600)
-    $minutos = [math]::Floor(($tempoAcumulado % 3600) / 60)
-    $segundos = [math]::Floor($tempoAcumulado % 60)
-    $stamp = if ($horas -gt 0) { "{0:D2}:{1:D2}:{2:D2}" -f [int]$horas, [int]$minutos, [int]$segundos } else { "{0:D2}:{1:D2}" -f [int]$minutos, [int]$segundos }
-    $listaCapitulos += "$stamp - $nome"
-    $tempoAcumulado += $duracao
-
-    $audioBrutoTemp = Join-Path $dirTempChunk "$nome.wav"
-    & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vn -acodec pcm_s16le -ar 16000 -ac 1 $audioBrutoTemp
-
-    $audioTratTemp = Join-Path $dirTempChunk "$($nome)_tratado.wav"
-    $cadeiaFiltrosVoz = "highpass=f=80,equalizer=f=3000:width_type=o:w=2:g=3,compand=0.3|0.3:1|1:-90/-60|-60/-40|-40/-30:6:0:-90:0.1,loudnorm=I=-16:LRA=11:TP=-1.5"
-    & ffmpeg -hide_banner -loglevel error -y -i $audioBrutoTemp -af $cadeiaFiltrosVoz $audioTratTemp
-
-    $srtFinal = Join-Path $pastas["1"] "$nome.srt"
-    $assFinal = Join-Path $pastas["1"] "$nome.ass"
-    
-    Write-Host "    Transcrevendo com Whisper (Word Timestamps) para Legenda Fluida..."
-    Atualizar-ProgressoUI 55 "Transcrevendo com Whisper..." -ForegroundColor Yellow
-    $scriptTranscricao = @"
-import os
-try:
-    from faster_whisper import WhisperModel
-    model = WhisperModel('medium', device='cpu', compute_type='int8')
-    segments, _ = model.transcribe(r'$audioBrutoTemp', language='pt', word_timestamps=True)
-    
-    with open(r'$srtFinal', 'w', encoding='utf-8') as f_srt, open(r'$assFinal', 'w', encoding='utf-8') as f_ass:
-        # Cabecalho do formato ASS para gerenciar fade suave e elegancia na borda
-        f_ass.write('[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n')
-        f_ass.write('[V4+ Styles]\n')
-        f_ass.write('Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n')
-        # Estilo Aula Fluida: Arial limpa, tamanho 54 (proporcional a 1080p), cor branca com sombra suave e fundo semitransparente discreto
-        f_ass.write('Style: AulaFluida,Arial,54,&H00FFFFFF,&H0000FFFF,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,1.5,1,2,40,40,35,1\n\n')
-        f_ass.write('[Events]\n')
-        f_ass.write('Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n')
-        
-        idx = 1
-        for seg in segments:
-            h1, m1, s1 = int(seg.start // 3600), int((seg.start % 3600) // 60), seg.start % 60
-            h2, m2, s2 = int(seg.end // 3600), int((seg.end % 3600) // 60), seg.end % 60
-            
-            tc_srt1 = f'{h1:02d}:{m1:02d}:{s1:06.3f}'.replace('.', ',')
-            tc_srt2 = f'{h2:02d}:{m2:02d}:{s2:06.3f}'.replace('.', ',')
-            f_srt.write(f'{idx}\n{tc_srt1} --> {tc_srt2}\n{seg.text.strip()}\n\n')
-            
-            # Formato de tempo para ASS (H:MM:SS.cc)
-            def fmt_ass(t):
-                th = int(t // 3600)
-                tm = int((t % 3600) // 60)
-                ts = t % 60
-                return f'{th}:{tm:02d}:{ts:05.2f}'
-            
-            t_start = fmt_ass(seg.start)
-            t_end = fmt_ass(seg.end)
-            texto_limpo = seg.text.strip().replace('\n', ' ')
-            
-            # Adiciona efeito imersivo de fade-in suave de 150ms na legenda da aula
-            f_ass.write(f'Dialogue: 0,{t_start},{t_end},AulaFluida,,0,0,0,,{{\\fad(150,150)}}{texto_limpo}\n')
-            idx += 1
-            
-    print('    [OK] Legendas SRT e ASS fluidas geradas com sucesso.')
-except Exception as e:
-    print(f'    [ERRO WHISPER] {e}')
-"@
-    python -c $scriptTranscricao
-    Start-Sleep -Seconds 1
-
-    # HARD SUB USANDO O ARQUIVO ASS FLUIDO (Com animação de fade suave e margem elegante)
-    
-# Define os parâmetros do encoder conforme a escolha do usuário na interface
-$argsEncoder = switch ($global:encoderEscolhido) {
-    0 { @("-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p") }
-    1 { @("-c:v", "libx264", "-preset", "faster", "-crf", "20", "-pix_fmt", "yuv420p") }
-    2 { @("-c:v", "h264_nvenc", "-preset", "p4", "-cq", "22", "-pix_fmt", "yuv420p") }
-    3 { @("-c:v", "h264_qsv", "-global_quality", "22", "-pix_fmt", "yuv420p") }
-    Default { @("-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p") }
+    [void][System.Windows.Forms.MessageBox]::Show($form, $msg, "Resultado", [System.Windows.Forms.MessageBoxButtons]::OK, $icone)
+    Start-Process explorer.exe -ArgumentList ('"{0}"' -f $dirSaida)
 }
 
-        if ($fazerHardsub -and (Test-Path $assFinal) -and ((Get-Item $assFinal).Length -gt 10)) {
-        $videoLegendado = Join-Path $dirSaida "${nome}_DINAMICO_LEGENDADO.mp4"
-        if (-not (Test-Path $videoLegendado)) {
-            Write-Host "    Renderizando versao com Legenda Fluida para Aulas..."
-    Atualizar-ProgressoUI 75 "Renderizando Legenda Fluida via GPU AMF..." -ForegroundColor Magenta
-            
-            # Formata caminho para o FFmpeg escapando apenas os dois-pontos do drive (sem barra invertida no final)
-            $assFormatado = $assFinal.Replace("\", "/").Replace(":", "\:")
-            
-            # Executa com o encoder selecionado na interface + copia de audio
-            & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles='$assFormatado'" @argsEncoder -c:a copy $videoLegendado
-            
-            # Se o encoder de GPU nao gerar o arquivo, aplica fallback automatico via CPU
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $videoLegendado)) {
-                Write-Host "    [AVISO] Recorrendo ao encoder CPU (libx264)..." -ForegroundColor Yellow
-                & ffmpeg -hide_banner -loglevel error -y -i $videoAlvo -vf "subtitles='$assFormatado'" -c:v libx264 -preset faster -crf 20 -c:a copy $videoLegendado
-            }
-
-            if (Test-Path $videoLegendado) {
-                Write-Host "    [OK] Video legendado gerado com sucesso!"
-    Atualizar-ProgressoUI 88 "Renderização concluída." -ForegroundColor Green
-            }
-        }
-    }
-
-    if (Test-Path $audioBrutoTemp) { Copy-Item -Path $audioBrutoTemp -Destination $pastas["2"] -Force }
-    if (Test-Path $audioTratTemp) { Copy-Item -Path $audioTratTemp -Destination $pastas["3"] -Force }
-}
-
-$listaCapitulos | Out-File -FilePath $minutagemArquivo -Encoding UTF8
-
-if ($fazerSlides) {
-    foreach ($video in $videos) {
-        $prefixo = $video.BaseName
-        $padraoSaida = Join-Path $pastas["4"] "${prefixo}_slide_%03d.jpg"
-        & ffmpeg -hide_banner -loglevel error -y -i $video.FullName -vf "select='gt(scene,0.25)',mpdecimate" -fps_mode vfr -q:v 2 $padraoSaida
-    }
-    if ($fazerPDF -and (Test-Path (Join-Path $raiz "editorial_engine.py"))) {
-        & python (Join-Path $raiz "editorial_engine.py") $dirSaida
-        $apostilaHtml = Join-Path $pastas["6"] "apostila-ilustrada.html"
-        if (Test-Path $apostilaHtml) {
-            Copy-Item -Path $apostilaHtml -Destination $pastas["5"] -Force
-            $edgePaths = @("C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", "C:\Program Files\Microsoft\Edge\Application\msedge.exe")
-            $edgeExe = $edgePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if ($edgeExe) {
-                $pdfDestino = Join-Path $pastas["6"] "Apostila-Oficial.pdf"
-                & $edgeExe --headless --disable-gpu --print-to-pdf="$pdfDestino" "$apostilaHtml" 2>$null
-            }
-        }
-    }
-}
-
-if ($fazerIA -and (Test-Path (Join-Path $raiz "gerador_ia.py"))) {
-    & python (Join-Path $raiz "gerador_ia.py") $dirSaida
-}
-
-if ($fazerCortes -and (Test-Path (Join-Path $raiz "gerador_cortes.py"))) {
-    & python (Join-Path $raiz "gerador_cortes.py") $dirSaida
-}
-
-Get-ChildItem -Path $dirSaida -Directory | Where-Object { $_.Name -match "^$($nomeAula)-\d+" -or $_.Name -match "^Aula\d+-\d+" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-
-$arquivoZip = Join-Path $dirSaida "Entregavel-$nomeAula.zip"
-Compress-Archive -Path $pastas["1"], $pastas["2"], $pastas["3"], $pastas["4"], $pastas["5"], $pastas["6"], $pastas["7"] -DestinationPath $arquivoZip -Force
-
-if ((Test-Path $arquivoZip) -and ((Get-Item $arquivoZip).Length -gt 1024)) {
-    foreach ($p in $pastas.Values) {
-        if (Test-Path $p) { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-}
-
-foreach ($video in $videos) {
-    if ($video.DirectoryName -ne $dirSaida) {
-        Move-Item -LiteralPath $video.FullName -Destination (Join-Path $dirSaida $video.Name) -Force
-    }
-}
-
-[System.Console]::Beep(1000, 300)
-[System.Console]::Beep(1500, 400)
-explorer.exe $dirSaida
-
-
-
-
-
-}
-
+# Fecha o processo do motor se a janela for fechada no meio
+$form.Add_FormClosing({ if ($global:procPipeline) { $global:cancelarPipeline = $true; Parar-Processo $global:procPipeline } })
 
 [void]$form.ShowDialog()
