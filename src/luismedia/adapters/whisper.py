@@ -16,7 +16,7 @@ from pathlib import Path
 from threading import Lock
 
 from ..core.config import WhisperConfig, WhisperDevice
-from ..core.errors import DependencyMissing, OutOfMemory
+from ..core.errors import DependencyMissing, OutOfMemory, TranscriptionFailed
 from ..core.logging import get_logger
 from ..core.models import Segment, Transcript, Word
 
@@ -106,7 +106,10 @@ class WhisperEngine:
                 except Exception as exc:  # noqa: BLE001
                     last = exc
                     if not _is_oom(exc) and device == "cpu":
-                        raise
+                        # ex.: download do modelo bloqueado (403/sem internet), audio ilegivel
+                        raise TranscriptionFailed(
+                            f"transcricao falhou com o modelo {model_name}: {exc}",
+                            detail=repr(exc)) from exc
                     log.warning("degradando transcricao", extra={
                         "model": model_name, "device": device, "error": str(exc)[:300]})
                     self._model, self._loaded = None, None

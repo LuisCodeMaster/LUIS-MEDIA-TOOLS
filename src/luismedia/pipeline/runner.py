@@ -224,7 +224,10 @@ class Pipeline:
             t0 = time.monotonic()
             try:
                 outputs = fn()
-            except LuisMediaError as exc:
+            except Exception as exc:  # noqa: BLE001 - nenhum erro derruba o lote inteiro
+                if not isinstance(exc, LuisMediaError):
+                    log.exception("erro inesperado", extra={"video": name, "stage": stage})
+                    exc = LuisMediaError(f"erro inesperado: {exc}", detail=repr(exc))
                 manifest.record(stage, "failed", error=str(exc))
                 log.error("etapa falhou", extra={"video": name, "stage": stage,
                                                  "error": str(exc), "detail": exc.detail})

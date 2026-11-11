@@ -45,6 +45,10 @@ class OutOfMemory(LuisMediaError):
     """CUDA/RAM insuficiente. Nao repete igual: o chamador deve degradar."""
 
 
+class TranscriptionFailed(LuisMediaError):
+    """Whisper falhou por motivo que nao e memoria (modelo nao baixou, audio ilegivel)."""
+
+
 class LLMOutputInvalid(LuisMediaError):
     """Resposta do LLM nao bate com o schema esperado."""
 

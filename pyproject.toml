@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "luismedia"
-version = "0.1.0"
-description = "LUIS MEDIA TOOLS - motor multiplataforma de pos-producao com IA local"
+version = "0.9.0"
+description = "LUIS MEDIA TOOLS - pos-producao de aulas com IA local: autocut, legendas, apostila, quiz e cortes 9:16"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.6",

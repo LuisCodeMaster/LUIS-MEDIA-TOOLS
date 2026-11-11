@@ -186,3 +186,20 @@ def test_pipeline_without_ollama_warns_and_finishes(tmp_path, lesson_video):
     p.whisper = FakeWhisper()
     [r] = p.run([lesson_video], tmp_path / "out")
     assert r.ok and any(w.startswith("ia:") for w in r.warnings)
+
+
+class ExplodingWhisper:
+    def transcribe(self, audio, duration, on_progress=None):
+        raise RuntimeError("403 Forbidden")  # erro que nao e da hierarquia do projeto
+
+
+def test_unexpected_error_fails_only_that_video(tmp_path, lesson_video):
+    from luismedia.pipeline.runner import Pipeline
+
+    s = Settings(render={"encoder": "libx264", "hardsub": False}, autocut={"enabled": False},
+                 llm={"enabled": False}, slides={"enabled": False, "handout": False})
+    p = Pipeline(s)
+    p.whisper = ExplodingWhisper()
+    results = p.run([lesson_video, lesson_video], tmp_path / "out")
+    assert len(results) == 2 and all(r.failed_stage == "transcricao" for r in results)
+    assert "403" in results[0].error

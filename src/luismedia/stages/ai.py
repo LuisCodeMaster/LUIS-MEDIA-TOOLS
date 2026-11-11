@@ -69,14 +69,14 @@ h1{{text-align:center;color:#38bdf8}}.card{{background:#1e293b;padding:24px;bord
 button{{display:block;width:100%;text-align:left;background:#334155;color:#f8fafc;padding:14px 18px;margin-bottom:10px;border:1px solid #475569;border-radius:8px;font-size:1em;cursor:pointer}}
 button.ok{{background:#166534;border-color:#22c55e}}button.no{{background:#991b1b;border-color:#ef4444}}
 #placar{{text-align:center;font-size:1.2em;margin-top:24px}}
-</style></head><body><h1>Quiz de fixacao: {title}</h1>{cards}<div id="placar"></div>
+</style></head><body><h1>Quiz de fixação: {title}</h1>{cards}<div id="placar"></div>
 <script>
 let feitas=0,certas=0;const total={total};
 document.querySelectorAll('.card').forEach(card=>card.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{{
  if(card.dataset.done)return;card.dataset.done=1;feitas++;
  const ok=b.dataset.c==='1';if(ok)certas++;b.classList.add(ok?'ok':'no');
  card.querySelector('[data-c="1"]').classList.add('ok');
- if(feitas===total)document.getElementById('placar').textContent=`Voce acertou ${{certas}} de ${{total}}.`;
+ if(feitas===total)document.getElementById('placar').textContent=`Você acertou ${{certas}} de ${{total}}.`;
 }})));
 </script></body></html>"""
 

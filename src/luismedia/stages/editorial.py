@@ -69,7 +69,7 @@ def build_handout(title: str, slides: list[SlideFrame], tr: Transcript, html_pat
             t_end = slides[i + 1].timestamp if i + 1 < len(slides) else float("inf")
             said = " ".join(s.text.strip() for s in tr.segments if sl.timestamp <= s.start < t_end)
             rel = Path(os.path.relpath(sl.path, html_path.parent)).as_posix()
-            text = html.escape(said) if said else "<em>Explicacao visual demonstrada na tela.</em>"
+            text = html.escape(said) if said else "<em>Explicação visual demonstrada na tela.</em>"
             blocks.append(f'<section class="bloco"><div class="tempo">{_ts(sl.timestamp)}</div>'
                           f'<div class="slide"><img src="{html.escape(rel)}" alt="Slide {i + 1}"></div>'
                           f'<div class="texto"><p>{text}</p></div></section>')
@@ -80,7 +80,7 @@ def build_handout(title: str, slides: list[SlideFrame], tr: Transcript, html_pat
     doc = (f'<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
            f'<title>Apostila - {html.escape(title)}</title><style>{CSS}</style></head><body>'
-           f'<div class="doc"><header><div class="sub">Material didatico</div><h1>{html.escape(title)}</h1>'
+           f'<div class="doc"><header><div class="sub">Material didático</div><h1>{html.escape(title)}</h1>'
            f'</header>{resumo}{"".join(blocks)}<footer>Gerado pelo LUIS MEDIA TOOLS</footer></div></body></html>')
     html_path.write_text(doc, encoding="utf-8")
     return html_path
