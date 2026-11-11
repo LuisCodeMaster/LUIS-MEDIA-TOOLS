@@ -26,11 +26,25 @@ Os vídeos originais **nunca são movidos nem apagados**. Se o processamento par
 
 ## Instalação (Windows)
 
-1. Baixe o projeto (botão **Code → Download ZIP**) e extraia numa pasta.
+### Pelo instalador (recomendado)
+
+1. Baixe o `LUIS-MEDIA-TOOLS-Setup-<versão>.exe` na página
+   [Releases](https://github.com/LuisCodeMaster/LUIS-MEDIA-TOOLS/releases).
+2. Dê dois cliques e siga o assistente. Não precisa ser administrador, e o Python e o FFmpeg
+   já vêm dentro do instalador.
+3. Abra o **LUIS MEDIA TOOLS** pelo Menu Iniciar ou pela Área de Trabalho.
+
+Para os recursos de IA (resumo, quiz, cortes e slides), instale também o
+[Ollama](https://ollama.com/download). O instalador oferece o link no final. Depois abra a tela
+**Diagnóstico** do app e clique em **Baixar modelo de IA**. O modelo do Whisper é baixado
+sozinho na primeira transcrição.
+
+### A partir do código (desenvolvimento)
+
+1. Baixe o projeto (botão **Code → Download ZIP**) e extraia numa pasta fixa, por exemplo `C:\LUIS-MEDIA-TOOLS`.
 2. Dê dois cliques em **`Instalar.cmd`**. Se o Windows mostrar um aviso de segurança, clique
    em **Executar**.
-3. Pronto: abra o app pelo atalho **LUIS MEDIA TOOLS** na Área de Trabalho ou no Menu Iniciar
-   (ou por `Abrir LUIS MEDIA TOOLS.cmd`).
+3. Abra o app pelo atalho **LUIS MEDIA TOOLS** na Área de Trabalho ou no Menu Iniciar.
 
 O instalador libera os scripts que o Windows bloqueia em arquivos baixados, confere o Python 3.10+, cria um ambiente isolado (`.venv`), instala o motor e o
 Whisper, oferece instalar o FFmpeg e o Ollama via `winget` e baixa o modelo de IA
@@ -132,7 +146,9 @@ ruff check src tests
 pytest -q            # 50 testes; os de integração geram vídeos sintéticos com o FFmpeg
 ```
 
-Versão portátil para Windows, com o app (`LUIS MEDIA TOOLS.exe`), a CLI e o FFmpeg embutidos:
+O instalador `Setup.exe` é gerado pelo GitHub Actions (`.github/workflows/release.yml`). Para
+publicar uma versão, crie uma tag: `git tag v1.0.0 && git push origin v1.0.0`. O instalador
+aparece em Releases. Para gerar localmente uma versão portátil com o app, a CLI e o FFmpeg:
 
 ```powershell
 .\packaging\build-windows.ps1 -FFmpegDir C:\ffmpeg\bin

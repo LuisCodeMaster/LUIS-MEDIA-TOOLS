@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.1] - 2026-11-11
+
+### Novo
+- **Instalador `Setup.exe`** (Inno Setup), gerado automaticamente pelo GitHub Actions: app,
+  Python e FFmpeg embutidos, sem precisar de administrador, com atalhos, desinstalador em
+  "Adicionar ou remover programas" e link opcional para o Ollama.
+- Publicação automática na página Releases ao criar uma tag `v*`.
+- `--selftest` no app, usado no build para confirmar que o executável abre e acha o FFmpeg embutido.
+
+### Corrigido
+- O Ollama aberto pelo `instalar.ps1` ficava preso à pasta do programa e impedia apagá-la.
+
 ## [1.0.0] - 2026-11-11
 
 ### Novo
