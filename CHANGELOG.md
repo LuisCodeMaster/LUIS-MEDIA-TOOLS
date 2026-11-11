@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.0] - 2026-11-11
+
+### Novo
+- **App desktop** (PySide6/Qt), que abre direto numa janela, sem terminal:
+  - Processar aulas: fila com arrastar e soltar, duração de cada vídeo, modos prontos e
+    personalizado, progresso por vídeo e etapa, cancelamento imediato e resumo final.
+  - Slides com IA: roteiro gerado pelo Ollama, editor e apresentação 16:9 interativa.
+  - Diagnóstico com explicação de como resolver e download do modelo de IA com progresso.
+  - Configurações salvas por usuário (Whisper, Ollama, qualidade, volume, ZIP).
+- Instalador cria o atalho **LUIS MEDIA TOOLS** na Área de Trabalho e no Menu Iniciar.
+- Versão portátil gera também `LUIS MEDIA TOOLS.exe` (janela, com ícone próprio).
+- Cancelar interrompe na hora o FFmpeg e a transcrição em andamento.
+- `--profile` aceita o nome do modo (`--profile redes-sociais`).
+
+### Corrigido
+- Janelas de console piscando a cada chamada do FFmpeg quando o app roda sem console.
+
+## [0.9.1] - 2026-11-11
+
+### Corrigido
+- Scripts bloqueados pelo Windows ("is not digitally signed") quando o projeto vem de um
+  ZIP baixado: o instalador agora libera os arquivos.
+- O instalador não baixa o modelo de IA de novo se ele já estiver instalado.
+
+### Novo
+- Atalhos de dois cliques: `Instalar.cmd`, `Abrir LUIS MEDIA TOOLS.cmd` e `Menu LUIS MEDIA TOOLS.cmd`.
+
 ## [0.9.0] - 2026-11-11
 
 ### Novo

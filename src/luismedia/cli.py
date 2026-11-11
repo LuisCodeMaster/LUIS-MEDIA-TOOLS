@@ -14,10 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
-from .adapters import ffmpeg as ff
-from .adapters.ollama import OllamaClient
-from .core.config import Encoder, Settings
-from .core.errors import LuisMediaError
+from .core.config import Settings
 from .core.logging import setup_logging
 
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".m4v", ".webm"}
@@ -35,41 +32,14 @@ def _collect(inputs: list[Path]) -> list[Path]:
 
 
 def cmd_doctor(settings: Settings) -> int:
-    checks: list[tuple[str, bool, str]] = []
-    for b in ("ffmpeg", "ffprobe"):
-        try:
-            checks.append((b, True, ff.find_binary(b)))
-        except LuisMediaError as e:
-            checks.append((b, False, str(e)))
-    if checks[0][1]:
-        checks.append(("legenda queimada (libass)", ff.has_filter("subtitles"), "filtro subtitles"))
-        for enc in (Encoder.NVIDIA, Encoder.AMD, Encoder.INTEL):
-            checks.append((f"encoder {enc.value}", ff.encoder_works(enc), "teste de 1 frame"))
-    try:
-        import faster_whisper  # noqa: F401
+    from .diagnostics import run_checks
 
-        from .adapters.whisper import detect_device
-
-        checks.append(("faster-whisper", True, "dispositivo: {}/{}".format(*detect_device(settings.whisper.device))))
-    except ImportError:
-        checks.append(("faster-whisper", False, "pip install 'luismedia[whisper]'"))
-    client = OllamaClient(settings.llm)
-    up = client.is_running()
-    checks.append(("ollama", up, settings.llm.base_url))
-    if up:
-        checks.append((f"modelo {settings.llm.model}", client.has_model(), "ollama pull " + settings.llm.model))
-
-    try:
-        from .adapters.pdf import find_browser
-
-        checks.append(("navegador (PDF)", True, find_browser()))
-    except LuisMediaError as e:
-        checks.append(("navegador (PDF)", False, str(e)))
-
-    for name, ok, info in checks:
-        print(f"  [{'OK' if ok else '--'}] {name:<22} {info}")
-    essential = all(ok for name, ok, _ in checks if name in {"ffmpeg", "ffprobe", "faster-whisper"})
-    return 0 if essential else 1
+    checks = run_checks(settings)
+    for c in checks:
+        print(f"  [{'OK' if c.ok else '--'}] {c.name:<28} {c.info}")
+        if not c.ok and c.fix:
+            print(f"       -> {c.fix}")
+    return 0 if all(c.ok for c in checks if c.essential) else 1
 
 
 def cmd_run(settings: Settings, inputs: list[Path], out: Path, json_events: bool) -> int:
@@ -111,8 +81,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("config")
     args = ap.parse_args(argv)
 
+    profile = args.profile
+    if profile is not None and not profile.exists():
+        from .diagnostics import builtin_profiles
+
+        profile = builtin_profiles().get(profile.stem, profile)  # aceita --profile redes-sociais
     try:
-        settings = Settings.load(args.profile)
+        settings = Settings.load(profile)
     except Exception as exc:  # noqa: BLE001
         print(f"Perfil invalido: {exc}", file=sys.stderr)
         return 2

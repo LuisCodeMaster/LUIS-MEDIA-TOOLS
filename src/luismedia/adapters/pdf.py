@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from ..core.errors import DependencyMissing, ProcessFailed, ProcessTimeout
+from .ffmpeg import NO_WINDOW
 
 
 def find_browser() -> str:
@@ -50,7 +51,7 @@ def html_to_pdf(html_file: Path, pdf_file: Path, timeout_s: float = 180) -> Path
                f"--user-data-dir={profile}", "--no-pdf-header-footer",
                f"--print-to-pdf={tmp}", html_file.resolve().as_uri()]
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s,
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, **NO_WINDOW,
                                  encoding="utf-8", errors="replace")
         except subprocess.TimeoutExpired as exc:
             tmp.unlink(missing_ok=True)

@@ -39,7 +39,7 @@ from ..adapters.ollama import OllamaClient
 from ..adapters.whisper import WhisperEngine
 from ..core import subtitles
 from ..core.config import Settings
-from ..core.errors import LuisMediaError
+from ..core.errors import Cancelled, LuisMediaError
 from ..core.logging import get_logger
 from ..core.models import MediaInfo, SlideFrame, Transcript
 from ..core.segmentation import SegmentationRules, segment_transcript
@@ -111,6 +111,7 @@ class Pipeline:
         self.listeners = listeners or []
         self.cancel = cancel or threading.Event()
         self.whisper = WhisperEngine(settings.whisper)
+        self.whisper.cancel = self.cancel
         self.encoder = ff.pick_encoder(settings.render.encoder)
         self.llm = OllamaClient(settings.llm)
         self._llm_problem: str | None | Literal["unchecked"] = "unchecked"
@@ -149,6 +150,13 @@ class Pipeline:
 
     # ------------------------------------------------------------------ lote
     def run(self, videos: list[Path], out_root: Path) -> list[VideoResult]:
+        ff.set_cancel_event(self.cancel)
+        try:
+            return self._run(videos, out_root)
+        finally:
+            ff.set_cancel_event(None)
+
+    def _run(self, videos: list[Path], out_root: Path) -> list[VideoResult]:
         out_root = out_root.resolve()
         out_root.mkdir(parents=True, exist_ok=True)
         results: list[VideoResult] = []
@@ -213,7 +221,7 @@ class Pipeline:
 
         def step(stage: str, fn: Callable[[], dict[str, str]], *, required: bool) -> bool:
             if self.cancel.is_set():
-                raise LuisMediaError("cancelado pelo usuario")
+                raise Cancelled("cancelado pelo usuario")
             cached = manifest.done(stage)
             if cached is not None:
                 result.outputs.update(cached)
@@ -224,6 +232,9 @@ class Pipeline:
             t0 = time.monotonic()
             try:
                 outputs = fn()
+            except Cancelled:
+                manifest.record(stage, "failed", error="cancelado")
+                raise
             except Exception as exc:  # noqa: BLE001 - nenhum erro derruba o lote inteiro
                 if not isinstance(exc, LuisMediaError):
                     log.exception("erro inesperado", extra={"video": name, "stage": stage})
