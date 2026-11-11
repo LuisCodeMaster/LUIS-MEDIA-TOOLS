@@ -29,7 +29,7 @@ import threading
 import time
 import zipfile
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -38,11 +38,13 @@ from ..adapters import pdf
 from ..adapters.ollama import OllamaClient
 from ..adapters.whisper import WhisperEngine
 from ..core import subtitles
+from ..core.captions import CaptionDoc, apply_to_doc, realign_words
 from ..core.config import Settings
 from ..core.errors import Cancelled, LuisMediaError
 from ..core.logging import get_logger
-from ..core.models import MediaInfo, SlideFrame, Transcript
-from ..core.segmentation import SegmentationRules, segment_transcript
+from ..core.models import MediaInfo, SlideFrame, Transcript, Word
+from ..core.segmentation import SegmentationRules, segment_transcript, segment_words
+from ..core.style import write_styled_ass
 from ..stages import ai, editorial, media
 
 log = get_logger("pipeline")
@@ -71,37 +73,92 @@ class VideoResult:
     warnings: list[str] = field(default_factory=list)
     failed_stage: str | None = None
     error: str | None = None
+    needs_review: bool = False  # parou para revisao das legendas (nao e falha)
 
     @property
     def ok(self) -> bool:
         return self.failed_stage is None
 
 
+# Quais etapas precisam ser refeitas quando outra roda de novo
+DEPENDS: dict[str, list[str]] = {
+    "autocut": [], "audio": ["autocut"], "transcricao": ["audio"], "masterizacao": ["audio"],
+    "legendas": ["transcricao"], "hardsub": ["legendas"], "resumo": ["transcricao"],
+    "quiz": ["transcricao"], "cortes": ["legendas"], "slides": ["autocut"],
+    "apostila": ["slides", "legendas", "resumo"],
+}
+# Etapas que dependem do texto das legendas (refeitas quando o usuario edita no app)
+CAPTION_STAGES = ["legendas"]
+
+
+def stage_config(settings: Settings, stage: str) -> str:
+    """Hash so da parte da configuracao que afeta a etapa: mudar o estilo da legenda nao
+    refaz a transcricao, mudar o modelo do Whisper refaz so dali para frente."""
+    s = settings
+    parts = {
+        "autocut": [s.autocut, s.render.crf],
+        "audio": [],
+        "transcricao": [s.whisper, s.subtitles.model_dump(exclude={"style_h", "style_v", "review",
+                                                                   "shorts_version"})],
+        "masterizacao": [s.audio],
+        "legendas": [s.subtitles.style_h, s.subtitles.shorts_version, s.subtitles.max_chars_shorts],
+        "hardsub": [s.render],
+        "resumo": [s.llm.model, s.llm.max_context_chars],
+        "quiz": [s.llm.model, s.llm.max_context_chars],
+        "cortes": [s.llm.model, s.llm.clips_count, s.subtitles.style_v, s.render.crf],
+        "slides": [s.slides.scene_threshold],
+        "apostila": [s.slides.handout_pdf],
+    }.get(stage, [])
+    raw = json.dumps([p.model_dump(mode="json") if hasattr(p, "model_dump") else p for p in parts],
+                     sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
 class Manifest:
-    def __init__(self, path: Path, config_hash: str) -> None:
+    def __init__(self, path: Path) -> None:
         self.path = path
-        self.data: dict = {"config_hash": config_hash, "stages": {}}
+        self.data: dict = {"version": 2, "stages": {}}
         if path.exists():
             try:
                 old = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 old = {}
-            if old.get("config_hash") == config_hash:  # config mudou => refaz tudo
+            if old.get("version") == 2:
                 self.data = old
 
-    def done(self, stage: str) -> dict | None:
+    def done(self, stage: str, cfg: str) -> dict | None:
         st = self.data["stages"].get(stage)
-        if st and st["status"] == "done" and all(Path(p).exists() for p in st["outputs"].values()):
+        if (st and st["status"] == "done" and st.get("cfg") == cfg
+                and all(Path(p).exists() for p in st["outputs"].values())):
             return st["outputs"]
         return None
 
     def record(self, stage: str, status: Status, outputs: dict[str, str] | None = None,
-               error: str | None = None) -> None:
+               error: str | None = None, cfg: str = "") -> None:
         self.data["stages"][stage] = {"status": status, "outputs": outputs or {},
-                                      "error": error, "at": time.time()}
+                                      "error": error, "cfg": cfg, "at": time.time()}
+        self._save()
+
+    def invalidate(self, stages: list[str]) -> None:
+        for st in stages:
+            self.data["stages"].pop(st, None)
+        self._save()
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
+
+
+def captions_edited(out_dir: Path) -> None:
+    """Chamado pelo editor do app: o texto mudou, refaz legendas e tudo que depende delas."""
+    Manifest(out_dir / "manifest.json").invalidate(CAPTION_STAGES)
+
+
+def find_reviews(out_root: Path) -> list[Path]:
+    """Legendas de um lote (para o editor do app): caminhos dos <nome>.captions.json."""
+    return sorted(out_root.glob("*/legendas/*.captions.json"))
 
 
 class Pipeline:
@@ -115,13 +172,13 @@ class Pipeline:
         self.encoder = ff.pick_encoder(settings.render.encoder)
         self.llm = OllamaClient(settings.llm)
         self._llm_problem: str | None | Literal["unchecked"] = "unchecked"
+        sub = settings.subtitles
         self.rules = SegmentationRules(
-            max_chars_line=settings.subtitles.max_chars_line,
-            max_chars_shorts=settings.subtitles.max_chars_shorts,
-            min_duration=settings.subtitles.min_duration_s,
-            max_duration=settings.subtitles.max_duration_s,
+            max_chars_line=sub.max_chars_line, max_chars_shorts=sub.max_chars_shorts,
+            min_duration=sub.min_duration_s, max_duration=sub.max_duration_s,
+            gap=sub.min_gap_s, max_cps=sub.max_cps, max_words=sub.style_h.max_words,
         )
-        self.config_hash = hashlib.sha256(settings.model_dump_json().encode()).hexdigest()[:16]
+        self.rules_v = replace(self.rules, max_words=sub.style_v.max_words, max_duration=min(sub.max_duration_s, 3.0))
         self._pos = (0, 0)
 
     # ------------------------------------------------------------------ util
@@ -166,11 +223,12 @@ class Pipeline:
             self._pos = (i, len(videos))
             results.append(self.process(v.resolve(), out_root))
         self._pos = (len(videos), len(videos))
-        if self.s.output.chapters and results:
-            self._write_chapters(results, out_root)
-        if self.s.output.zip_package and any(r.ok for r in results):
+        finished = [r for r in results if r.ok and not r.needs_review]
+        if self.s.output.chapters and finished:
+            self._write_chapters(finished, out_root)
+        if self.s.output.zip_package and finished:
             try:
-                self._zip(results, out_root)
+                self._zip(finished, out_root)
             except OSError as exc:
                 log.error("falha ao gerar ZIP", extra={"error": str(exc)})
         (out_root / "relatorio.json").write_text(json.dumps(
@@ -215,31 +273,34 @@ class Pipeline:
         dirs = {k: out / k for k in ("legendas", "audio", "slides", "documentos", "cortes")}
         for d in dirs.values():
             d.mkdir(parents=True, exist_ok=True)
-        manifest = Manifest(out / "manifest.json", self.config_hash)
+        manifest = Manifest(out / "manifest.json")
         result = VideoResult(source=src_path)
         work = Path(tempfile.mkdtemp(prefix="lmt_", dir=out))
+        rerun: set[str] = set()  # etapas executadas agora (forcam as dependentes)
 
         def step(stage: str, fn: Callable[[], dict[str, str]], *, required: bool) -> bool:
             if self.cancel.is_set():
                 raise Cancelled("cancelado pelo usuario")
-            cached = manifest.done(stage)
+            cfg = stage_config(self.s, stage)
+            cached = None if any(d in rerun for d in DEPENDS.get(stage, [])) else manifest.done(stage, cfg)
             if cached is not None:
                 result.outputs.update(cached)
                 self._emit(video=name, stage=stage, status="skipped", progress=1, message="ja feito")
                 return True
+            rerun.add(stage)
             self._emit(video=name, stage=stage, status="running")
-            manifest.record(stage, "running")
+            manifest.record(stage, "running", cfg=cfg)
             t0 = time.monotonic()
             try:
                 outputs = fn()
             except Cancelled:
-                manifest.record(stage, "failed", error="cancelado")
+                manifest.record(stage, "failed", error="cancelado", cfg=cfg)
                 raise
             except Exception as exc:  # noqa: BLE001 - nenhum erro derruba o lote inteiro
                 if not isinstance(exc, LuisMediaError):
                     log.exception("erro inesperado", extra={"video": name, "stage": stage})
                     exc = LuisMediaError(f"erro inesperado: {exc}", detail=repr(exc))
-                manifest.record(stage, "failed", error=str(exc))
+                manifest.record(stage, "failed", error=str(exc), cfg=cfg)
                 log.error("etapa falhou", extra={"video": name, "stage": stage,
                                                  "error": str(exc), "detail": exc.detail})
                 self._emit(video=name, stage=stage, status="failed", message=str(exc))
@@ -248,7 +309,7 @@ class Pipeline:
                     return False
                 result.warnings.append(f"{stage}: {exc}")
                 return True
-            manifest.record(stage, "done", outputs)
+            manifest.record(stage, "done", outputs, cfg=cfg)
             result.outputs.update(outputs)
             log.info("etapa ok", extra={"video": name, "stage": stage,
                                         "seconds": round(time.monotonic() - t0, 1)})
@@ -283,13 +344,14 @@ class Pipeline:
                     return result
                 target = ff.probe(Path(result.outputs["video_dinamico"]))
             result.duration = target.duration
+            result.outputs["video_base"] = str(target.path)
 
             # 2. Audio ---------------------------------------------------------
             if not step("audio", lambda: {"audio_bruto": str(
                     media.extract_audio(target, dirs["audio"] / f"{name}.wav"))}, required=True):
                 return result
 
-            # 3. Transcricao + legendas ---------------------------------------
+            # 3. Transcricao + legenda editavel ------------------------------
             def _transcribe() -> dict[str, str]:
                 tr = self.whisper.transcribe(
                     Path(result.outputs["audio_bruto"]), target.duration,
@@ -298,47 +360,82 @@ class Pipeline:
                 leg = dirs["legendas"]
                 (leg / f"{name}.transcript.json").write_text(tr.model_dump_json(indent=2), encoding="utf-8")
                 caps = segment_transcript(tr.segments, self.rules)
-                res = {
-                    "transcript": str(leg / f"{name}.transcript.json"),
-                    "srt": str(subtitles.write_srt(caps, leg / f"{name}.srt")),
-                    "vtt": str(subtitles.write_vtt(caps, leg / f"{name}.vtt")),
-                    "ass": str(subtitles.write_ass(caps, leg / f"{name}.ass",
-                                                   width=target.width or 1920,
-                                                   height=target.height or 1080)),
-                }
-                if self.s.subtitles.shorts_version:
-                    shorts = segment_transcript(tr.segments, self.rules, shorts=True)
-                    res["srt_shorts"] = str(subtitles.write_srt(shorts, leg / f"{name}_shorts.srt"))
-                return res
+                doc = CaptionDoc(video=str(target.path), width=target.width or 1920,
+                                 height=target.height or 1080, captions=caps)
+                apply_to_doc(doc, self.s.subtitles.replacements)
+                return {"transcript": str(leg / f"{name}.transcript.json"),
+                        "captions": str(doc.save(leg / f"{name}.captions.json"))}
 
             if not step("transcricao", _transcribe, required=True):
                 return result
-            transcript = Transcript.model_validate_json(
-                Path(result.outputs["transcript"]).read_text(encoding="utf-8"))
+            captions_path = Path(result.outputs["captions"])
 
-            # 4. Audio master + hardsub ---------------------------------------
+            # 4. Audio master (nao depende do texto) -------------------------
             if self.s.audio.master:
                 step("masterizacao", lambda: {"audio_master": str(media.master_audio(
                     Path(result.outputs["audio_bruto"]), dirs["audio"] / f"{name}_master.wav",
                     target.duration, self.s.audio))}, required=False)
+
+            # 5. IA de texto (resumo/quiz usam a transcricao) ----------------
+            transcript = Transcript.model_validate_json(
+                Path(result.outputs["transcript"]).read_text(encoding="utf-8"))
+            llm_ok = False
+            if self._wants_llm():
+                problem = self.llm_problem()
+                if problem:
+                    skip("ia", problem)
+                else:
+                    llm_ok = True
+                    self._text_ai(step, name, transcript, dirs)
+
+            # 6. Revisao: para aqui ate o usuario aprovar no app -------------
+            doc = CaptionDoc.load(captions_path)
+            if self.s.subtitles.review and not doc.approved:
+                result.needs_review = True
+                self._emit(video=name, stage="revisao", status="skipped",
+                           message="aguardando revisao das legendas")
+                return result
+
+            # 7. Arquivos de legenda (do texto revisado) --------------------
+            def _subs() -> dict[str, str]:
+                d = CaptionDoc.load(captions_path)
+                leg = dirs["legendas"]
+                res = {
+                    "srt": str(subtitles.write_srt(d.captions, leg / f"{name}.srt")),
+                    "vtt": str(subtitles.write_vtt(d.captions, leg / f"{name}.vtt")),
+                    "ass": str(write_styled_ass(d.captions, leg / f"{name}.ass", self.s.subtitles.style_h,
+                                                d.width, d.height)),
+                }
+                if self.s.subtitles.shorts_version:
+                    shorts = segment_words(caption_words(d), self.rules, shorts=True)
+                    res["srt_shorts"] = str(subtitles.write_srt(shorts, leg / f"{name}_shorts.srt"))
+                return res
+
+            if not step("legendas", _subs, required=True):
+                return result
 
             if self.s.render.hardsub:
                 step("hardsub", lambda: {"video_legendado": str(media.burn_subtitles(
                     target, Path(result.outputs["ass"]), out / f"{name}_LEGENDADO.mp4",
                     encoder=self.encoder, crf=self.s.render.crf, work=work))}, required=False)
 
-            # 5. IA -----------------------------------------------------------
-            summary_md: str | None = None
-            if self._wants_llm():
-                problem = self.llm_problem()
-                if problem:
-                    skip("ia", problem)
-                else:
-                    self._ai_steps(step, name, target, transcript, dirs)
-                    sp = result.outputs.get("resumo")
-                    summary_md = Path(sp).read_text(encoding="utf-8") if sp else None
+            # 8. Cortes 9:16 (do texto revisado, com o estilo vertical) ------
+            if llm_ok and self.s.llm.clips:
+                def _clips() -> dict[str, str]:
+                    d = CaptionDoc.load(captions_path)
+                    plan = ai.pick_clips(self.llm, transcript, self.s.llm.clips_count, self.s.llm.max_context_chars)
+                    res = {}
+                    for i, clip in enumerate(plan, 1):
+                        slug = "".join(ch if ch.isalnum() else "_" for ch in clip.title)[:50].strip("_")
+                        dst = dirs["cortes"] / f"{name}_corte_{i}_{slug or 'trecho'}.mp4"
+                        ai.render_vertical_clip(target, clip, d.captions, dst, encoder=self.encoder,
+                                                crf=self.s.render.crf, rules=self.rules_v,
+                                                style=self.s.subtitles.style_v)
+                        res[f"corte_{i}"] = str(dst)
+                    return res
+                step("cortes", _clips, required=False)
 
-            # 6. Slides + apostila --------------------------------------------
+            # 9. Slides + apostila --------------------------------------------
             if self.s.slides.enabled:
                 def _slides() -> dict[str, str]:
                     frames = media.extract_slides(target, dirs["slides"], self.s.slides.scene_threshold)
@@ -355,8 +452,14 @@ class Pipeline:
                     if "slides_index" in result.outputs:
                         frames = [SlideFrame.model_validate(x) for x in json.loads(
                             Path(result.outputs["slides_index"]).read_text(encoding="utf-8"))]
-                    page = editorial.build_handout(name, frames, transcript,
-                                                   dirs["documentos"] / "Apostila.html", summary_md)
+                    sp = result.outputs.get("resumo")
+                    summary_md = Path(sp).read_text(encoding="utf-8") if sp and Path(sp).exists() else None
+                    d = CaptionDoc.load(captions_path)
+                    tr = Transcript(language=transcript.language, duration=transcript.duration,
+                                    model=transcript.model, device=transcript.device,
+                                    segments=[c.model_copy(update={"text": c.text.replace("\n", " ")})
+                                              for c in d.captions])
+                    page = editorial.build_handout(name, frames, tr, dirs["documentos"] / "Apostila.html", summary_md)
                     res = {"apostila_html": str(page)}
                     if self.s.slides.handout_pdf:
                         try:
@@ -375,7 +478,7 @@ class Pipeline:
             if not self.s.keep_intermediates:
                 shutil.rmtree(work, ignore_errors=True)
 
-    def _ai_steps(self, step, name: str, target: MediaInfo, tr: Transcript, dirs: dict[str, Path]) -> None:
+    def _text_ai(self, step, name: str, tr: Transcript, dirs: dict[str, Path]) -> None:
         c = self.s.llm
         material: dict[str, str] = {}
 
@@ -398,15 +501,7 @@ class Pipeline:
                 return {"quiz": str(p)}
             step("quiz", _quiz, required=False)
 
-        if c.clips:
-            def _clips() -> dict[str, str]:
-                plan = ai.pick_clips(self.llm, tr, c.clips_count, c.max_context_chars)
-                res = {}
-                for i, clip in enumerate(plan, 1):
-                    slug = "".join(ch if ch.isalnum() else "_" for ch in clip.title)[:50].strip("_")
-                    dst = dirs["cortes"] / f"{name}_corte_{i}_{slug or 'trecho'}.mp4"
-                    ai.render_vertical_clip(target, clip, tr, dst, encoder=self.encoder,
-                                            crf=self.s.render.crf, rules=self.rules)
-                    res[f"corte_{i}"] = str(dst)
-                return res
-            step("cortes", _clips, required=False)
+
+def caption_words(doc: CaptionDoc) -> list[Word]:
+    """Palavras com tempo de todas as legendas (ja com as correcoes do usuario)."""
+    return [w for c in doc.captions for w in (c.words or realign_words(c, c.text.replace("\n", " ")).words)]

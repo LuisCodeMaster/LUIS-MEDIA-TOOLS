@@ -12,10 +12,11 @@ from pathlib import Path
 
 from ..adapters import ffmpeg as ff
 from ..adapters.ollama import OllamaClient
-from ..core import subtitles
+from ..core.captions import clip_window, realign_words
 from ..core.config import Encoder
 from ..core.models import ClipPlan, ClipSuggestion, MediaInfo, Quiz, Segment, Transcript
-from ..core.segmentation import SegmentationRules, segment_transcript
+from ..core.segmentation import SegmentationRules, segment_words
+from ..core.style import SubtitleStyle, write_styled_ass
 
 SYSTEM = ("Voce e um assistente pedagogico. Responda sempre em portugues do Brasil, "
           "com base APENAS no conteudo fornecido. Nao invente fatos.")
@@ -110,27 +111,28 @@ def pick_clips(client: OllamaClient, tr: Transcript, n: int, max_chars: int) -> 
     return sorted(valid, key=lambda c: c.start)[:n]
 
 
-def render_vertical_clip(src: MediaInfo, clip: ClipSuggestion, tr: Transcript, out: Path,
-                         *, encoder: Encoder, crf: int, rules: SegmentationRules) -> Path:
-    """Corte 9:16: fundo desfocado + video centralizado + legenda grande queimada."""
+def render_vertical_clip(src: MediaInfo, clip: ClipSuggestion, captions: list[Segment], out: Path,
+                         *, encoder: Encoder, crf: int, rules: SegmentationRules,
+                         style: SubtitleStyle) -> Path:
+    """Corte 9:16: fundo desfocado + video centralizado + legenda no estilo vertical
+    (ex.: CapCut com palavra destacada), feita a partir das legendas ja revisadas."""
+    from .media import subtitles_filter
+
     ff.require_filter("subtitles", "legenda nos cortes 9:16")
     work = out.parent
     dur = min(clip.end, src.duration) - clip.start
-    local: list[Segment] = []
-    for s in tr.segments:
-        if s.end <= clip.start or s.start >= clip.end:
-            continue
-        words = [w.model_copy(update={"start": max(0, w.start - clip.start), "end": max(0, w.end - clip.start)})
-                 for w in s.words if clip.start <= w.start < clip.end]
-        local.append(Segment(start=max(0, s.start - clip.start), end=min(dur, s.end - clip.start),
-                             text=s.text, words=words))
+    local = clip_window(captions, clip.start, clip.start + dur)
+    words = [w for c in local for w in (c.words or realign_words(c, c.text.replace("\n", " ")).words)]
+    caps = segment_words(words, rules, shorts=True) if words else local
+    if style.highlight != "none":  # o karaoke precisa das palavras dentro de cada legenda
+        caps = [c.model_copy(update={"words": [w for w in words if c.start - 0.01 <= w.start < c.end]})
+                for c in caps]
     ass_name = out.stem + ".ass"
-    subtitles.write_ass(segment_transcript(local, rules, shorts=True), work / ass_name,
-                        width=1080, height=1920, vertical=True)
+    write_styled_ass(caps, work / ass_name, style, 1080, 1920)
     graph = ("[0:v]split=2[bg][fg];"
              "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:6[bgb];"
              "[fg]scale=1080:-2:force_original_aspect_ratio=decrease[fgs];"
-             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,subtitles={ass_name}[v]")
+             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,{subtitles_filter(ass_name, work)}[v]")
     try:
         return ff.run_to_file(
             out,

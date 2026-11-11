@@ -347,6 +347,12 @@ class SettingsPage(QWidget):
         f3.addRow("Qualidade do vídeo (CRF)", self.crf)
         f3.addRow("Volume alvo", self.lufs)
         av.body.addLayout(f3)
+        self.max_cps = QSpinBox()
+        self.max_cps.setRange(10, 25)
+        self.max_cps.setSuffix(" car./s")
+        self.max_cps.setFixedWidth(120)
+        self.max_cps.setToolTip("Velocidade máxima de leitura. O padrão profissional é 17.")
+        f3.addRow("Velocidade de leitura", self.max_cps)
         self.chapters = toggle("Gerar capítulos do YouTube")
         self.zip = toggle("Gerar Entregavel.zip")
         self.zip_videos = toggle("Incluir os vídeos no ZIP")
@@ -354,8 +360,17 @@ class SettingsPage(QWidget):
         for w in (self.chapters, self.zip, self.zip_videos, self.keep_tmp):
             av.body.addWidget(w)
 
+        fixes = Card("Correções automáticas das legendas")
+        self.replacements = QPlainTextEdit()
+        self.replacements.setObjectName("code")
+        self.replacements.setPlaceholderText("Uma por linha:  errado = certo\nwisper = Whisper\nbascara = Bhaskara")
+        self.replacements.setMaximumHeight(120)
+        fixes.body.addWidget(self.replacements)
+        fixes.body.addWidget(hint("Aplicadas em toda transcrição nova. Também dá para adicionar pela tela "
+                                  "Revisar legendas, marcando \"Lembrar para as próximas aulas\"."))
         right = QVBoxLayout()
         right.addWidget(av)
+        right.addWidget(fixes)
         right.addStretch(1)
         cols.addLayout(left, 1)
         cols.addLayout(right, 1)
@@ -394,6 +409,8 @@ class SettingsPage(QWidget):
         self.zip_videos.setChecked(s.output.zip_include_videos)
         self.zip_videos.setEnabled(s.output.zip_package)
         self.keep_tmp.setChecked(s.keep_intermediates)
+        self.max_cps.setValue(round(s.subtitles.max_cps))
+        self.replacements.setPlainText("\n".join(f"{k} = {v}" for k, v in s.subtitles.replacements.items()))
         self.saved.setText("")
 
     def values(self) -> dict:
@@ -406,7 +423,17 @@ class SettingsPage(QWidget):
             "output": {"chapters": self.chapters.isChecked(), "zip_package": self.zip.isChecked(),
                        "zip_include_videos": self.zip_videos.isChecked()},
             "keep_intermediates": self.keep_tmp.isChecked(),
+            "subtitles": {"max_cps": float(self.max_cps.value()), "replacements": self._parse_replacements()},
         }
+
+    def _parse_replacements(self) -> dict[str, str]:
+        out = {}
+        for line in self.replacements.toPlainText().splitlines():
+            if "=" in line:
+                wrong, right = line.split("=", 1)
+                if wrong.strip():
+                    out[wrong.strip()] = right.strip()
+        return out
 
     def save(self) -> None:
         try:

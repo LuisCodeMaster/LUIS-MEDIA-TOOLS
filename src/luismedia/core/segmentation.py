@@ -7,7 +7,10 @@ palavras (com timestamp) sao reagrupadas em blocos legiveis:
 2. nunca termina um bloco em palavra fraca ("de", "que", "para"...);
 3. respeita duracao maxima e tamanho maximo;
 4. distribui em ate duas linhas equilibradas (preferindo quebrar apos virgula);
-5. ajusta duracoes: minimo legivel, maximo, sem invadir a proxima legenda.
+5. ajusta duracoes: minimo legivel, maximo, sem invadir a proxima legenda;
+6. velocidade de leitura: estende a legenda ate ~17 caracteres por segundo quando ha espaco;
+7. intervalo minimo de 2 quadros (~0,083 s) entre legendas, para o olho perceber a troca;
+8. limite opcional de palavras por legenda (cortes 9:16 no estilo CapCut: 2 a 4 palavras).
 
 Mesmas regras e limiares da v3.1, agora testaveis e usados pelo pipeline principal.
 """
@@ -35,7 +38,9 @@ class SegmentationRules:
     strong_pause: float = 0.75
     max_block_chars: int = 72
     split_chars: int = 55
-    gap: float = 0.03
+    gap: float = 0.083        # 2 quadros a 24 fps (padrao Netflix)
+    max_cps: float = 17.0     # caracteres por segundo
+    max_words: int = 0        # 0 = sem limite
 
 
 def normalize(text: str) -> str:
@@ -141,21 +146,42 @@ def _split_long(block: list[Word], r: SegmentationRules) -> list[list[Word]]:
     return parts
 
 
+def reading_time(text: str, r: SegmentationRules) -> float:
+    """Tempo minimo para ler o texto na velocidade maxima (sem contar a quebra de linha)."""
+    chars = len(text.replace("\n", " ").strip())
+    return max(r.min_duration, chars / r.max_cps if r.max_cps else 0)
+
+
+def cps(seg: Segment) -> float:
+    dur = max(0.001, seg.end - seg.start)
+    return len(seg.text.replace("\n", " ").strip()) / dur
+
+
 def fix_durations(caps: list[Segment], r: SegmentationRules) -> list[Segment]:
     out: list[Segment] = []
     for i, c in enumerate(caps):
         start, end = c.start, c.end
         nxt = caps[i + 1].start if i + 1 < len(caps) else None
-        end = min(end, start + r.max_duration)
-        if nxt is not None and end >= nxt:
-            end = nxt - r.gap
-        if end - start < r.min_duration:
-            desired = start + r.min_duration
-            if nxt is not None:
-                desired = min(desired, nxt - r.gap)
-            end = max(end, desired)
+        limit = nxt - r.gap if nxt is not None else float("inf")
+        # estende ate o tempo de leitura (17 cps / duracao minima), sem invadir a proxima
+        desired = start + min(r.max_duration, reading_time(c.text, r))
+        end = max(end, min(desired, limit))
+        end = min(end, start + r.max_duration, limit)
         end = max(end, start + 0.01)  # nunca duracao zero/negativa (a v3.1 permitia)
-        out.append(Segment(start=start, end=end, text=c.text))
+        out.append(Segment(start=start, end=end, text=c.text, words=c.words))
+    return out
+
+
+def _chunk_words(part: list[Word], max_words: int) -> list[list[Word]]:
+    if max_words <= 0 or len(part) <= max_words:
+        return [part]
+    n = -(-len(part) // max_words)  # grupos equilibrados: 7 palavras/3 -> 3+2+2
+    size, extra = divmod(len(part), n)
+    out, i = [], 0
+    for g in range(n):
+        k = size + (1 if g < extra else 0)
+        out.append(part[i:i + k])
+        i += k
     return out
 
 
@@ -169,7 +195,7 @@ def _fit(part: list[Word], max_chars: int) -> list[Segment]:
     uma linha unica longa demais nesse caso."""
     text = wrap_two_lines(normalize(" ".join(w.text for w in part)), max_chars)
     if _fits(text, max_chars) or len(part) == 1:
-        return [Segment(start=part[0].start, end=part[-1].end, text=text)]
+        return [Segment(start=part[0].start, end=part[-1].end, text=text, words=part)]
     total = len(normalize(" ".join(w.text for w in part)))
     best_i, best_score = 1, float("-inf")
     for i in range(1, len(part)):
@@ -191,7 +217,8 @@ def segment_words(words: list[Word], rules: SegmentationRules | None = None,
     caps: list[Segment] = []
     for block in build_blocks(_clean_words(words), r):
         for part in _split_long(block, r):
-            caps.extend(_fit(part, max_chars))
+            for piece in _chunk_words(part, r.max_words):
+                caps.extend(_fit(piece, max_chars))
     return fix_durations(caps, r)
 
 
@@ -203,5 +230,6 @@ def segment_transcript(segments: list[Segment], rules: SegmentationRules | None 
         return segment_words(words, rules, shorts=shorts)
     r = rules or SegmentationRules()
     max_chars = r.max_chars_shorts if shorts else r.max_chars_line
-    return [Segment(start=s.start, end=s.end, text=wrap_two_lines(normalize(s.text), max_chars))
+    caps = [Segment(start=s.start, end=s.end, text=wrap_two_lines(normalize(s.text), max_chars))
             for s in segments if normalize(s.text)]
+    return fix_durations(caps, r)

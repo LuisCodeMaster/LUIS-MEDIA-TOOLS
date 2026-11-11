@@ -13,8 +13,10 @@ Nada sai do seu computador: a transcrição usa o Whisper e a IA usa o Ollama, a
 | Recurso | Resultado |
 | --- | --- |
 | **Autocut** | Remove as pausas curtas e mantém as pausas didáticas longas. Exporta uma timeline EDL para DaVinci Resolve ou Premiere |
-| **Legendas** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, sem cortar frases em "de", "que" ou "para". Inclui uma versão Shorts com 32 caracteres |
-| **Legenda queimada** | Vídeo final com a legenda embutida e fade suave |
+| **Legendas profissionais** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, até 17 caracteres por segundo, 2 quadros entre legendas, sem cortar frases em "de", "que" ou "para". Inclui versão Shorts |
+| **Revisão** | Editor com o vídeo para corrigir texto e tempo antes de gerar o vídeo legendado, com localizar e substituir e correções automáticas para as próximas aulas |
+| **Vocabulário da aula** | Nomes, siglas e termos passados ao Whisper para ele acertar a grafia |
+| **Estilos estilo CapCut** | Fontes, cores, contorno, caixa, neon, posição, animação e destaque da palavra falada (karaokê), com prévia real e modelos prontos |
 | **Masterização de voz** | Equalização e loudness em duas passadas, no alvo de **-14 LUFS** (padrão de YouTube e Spotify) |
 | **Slides e apostila** | Detecta cada troca de slide com o instante exato e monta uma apostila em HTML e PDF com o slide e o que foi falado sobre ele |
 | **Resumo e quiz (IA)** | Resumo executivo em Markdown e quiz interativo em HTML com placar |
@@ -57,12 +59,18 @@ como aviso no relatório.
 
 ### App desktop
 
-A janela tem quatro telas:
+A janela tem seis telas:
 
 - **Processar aulas:** arraste vídeos ou pastas, escolha o modo (Curso completo, Foco em redes
   sociais, Pré-edição para DaVinci/Premiere ou Personalizado), ajuste as opções e clique em
   **Iniciar**. A tabela mostra a etapa de cada vídeo, **Cancelar** para na hora sem perder o
   que já ficou pronto, e no fim aparece o resumo com o botão **Abrir pasta de saída**.
+- **Revisar legendas:** vídeo + lista de legendas com alerta de leitura rápida; corrija texto e
+  tempo, rebalanceie linhas e use localizar e substituir. "Aprovar e gerar vídeos" continua de
+  onde parou, sem transcrever de novo.
+- **Estilo das legendas:** modelos prontos e todos os ajustes (fonte, cores, contorno, caixa,
+  neon, posição, animação, palavras por legenda, destaque da palavra falada) para a aula 16:9
+  e para os cortes 9:16, com prévia desenhada pelo mesmo motor que gera o vídeo.
 - **Slides com IA:** escreva o tema, a IA monta o roteiro, você ajusta o texto e gera uma
   apresentação 16:9 interativa (laser, desenho, notas, visão geral, exportar PDF).
 - **Diagnóstico:** confere FFmpeg, placa de vídeo, Whisper, Ollama e navegador, explica como
@@ -143,7 +151,7 @@ continuam disponíveis e corrigidos enquanto a migração para o motor novo term
 ```bash
 python -m pip install -e ".[dev]"
 ruff check src tests
-pytest -q            # 50 testes; os de integração geram vídeos sintéticos com o FFmpeg
+pytest -q            # 68 testes; os de integração geram vídeos sintéticos com o FFmpeg
 ```
 
 O instalador `Setup.exe` é gerado pelo GitHub Actions (`.github/workflows/release.yml`). Para

@@ -40,6 +40,16 @@ def detect_device(pref: WhisperDevice) -> tuple[str, str]:
     return "cpu", "int8"
 
 
+def vocabulary_kwargs(cfg: WhisperConfig) -> dict:
+    """Termos da aula (nomes, siglas, formulas): vao como contexto inicial e como hotwords,
+    o que faz o Whisper preferir essa grafia ("Vygotsky", "LGPD", "Bhaskara")."""
+    terms = [t.strip() for t in cfg.vocabulary if t.strip()]
+    if not terms:
+        return {}
+    joined = ", ".join(dict.fromkeys(terms))[:600]
+    return {"initial_prompt": f"Aula com os termos: {joined}.", "hotwords": joined}
+
+
 def _is_oom(exc: BaseException) -> bool:
     msg = str(exc).lower()
     return any(k in msg for k in ("out of memory", "cuda_error_out_of_memory",
@@ -90,7 +100,7 @@ class WhisperEngine:
                     model = self._load(model_name, device, compute)
                     seg_iter, info = model.transcribe(
                         str(audio), language=self.cfg.language, beam_size=self.cfg.beam_size,
-                        word_timestamps=True, vad_filter=self.cfg.vad_filter,
+                        word_timestamps=True, vad_filter=self.cfg.vad_filter, **vocabulary_kwargs(self.cfg),
                     )
                     segments: list[Segment] = []
                     for s in seg_iter:  # gerador: o trabalho acontece aqui
