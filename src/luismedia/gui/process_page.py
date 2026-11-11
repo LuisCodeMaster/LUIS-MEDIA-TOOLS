@@ -294,7 +294,8 @@ class ProcessPage(QWidget):
         self.btn_clear.clicked.connect(self._clear)
         self.drop.dropped.connect(self.add_paths)
         self.btn_out.clicked.connect(self._pick_out)
-        self.btn_start.clicked.connect(self.start)
+        # lambda: o sinal clicked() envia um bool que nao pode cair no parametro `only`
+        self.btn_start.clicked.connect(lambda _checked=False: self.start())
         self.btn_cancel.clicked.connect(self.cancel)
         self.btn_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.out_edit.text())))
         self.btn_log.clicked.connect(self._toggle_log)
