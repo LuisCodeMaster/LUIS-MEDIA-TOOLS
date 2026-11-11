@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("PySide6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from .conftest import needs_ffmpeg  # noqa: E402
+from .conftest import _has_libass, needs_ffmpeg, needs_libass  # noqa: E402
 
 
 @pytest.fixture
@@ -106,11 +106,12 @@ def test_style_page_presets_save_and_preview(window):
     assert sp.v.preset.currentText() == "Personalizado"
     sp.save()
     assert state.load_base_settings().subtitles.style_v.size == 9.5
-    if __import__("shutil").which("ffmpeg"):
+    if _has_libass():  # a previa e desenhada pelo libass do FFmpeg
         assert pump(app, lambda: sp.v.preview.pixmap() is not None and not sp.v.preview.pixmap().isNull(), 30)
 
 
 @needs_ffmpeg
+@needs_libass
 def test_review_flow_in_the_app(window, tmp_path, lesson_video, monkeypatch):
     import luismedia.pipeline.runner as runner
 
