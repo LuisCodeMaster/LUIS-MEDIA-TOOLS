@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from importlib import resources
+from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QIcon
@@ -22,8 +23,10 @@ from PySide6.QtWidgets import (
 
 from .. import __version__
 from . import state, theme
+from .captions_page import CaptionsPage
 from .other_pages import DiagnosticsPage, SettingsPage, SlidesPage, ollama_version
 from .process_page import ProcessPage
+from .style_page import StylePage
 from .tasks import run_task
 
 APP_NAME = "LUIS MEDIA TOOLS"
@@ -75,7 +78,8 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         self.nav.setCursor(Qt.CursorShape.PointingHandCursor)
-        for label in ("Processar aulas", "Slides com IA", "Diagnóstico", "Configurações"):
+        for label in ("Processar aulas", "Revisar legendas", "Estilo das legendas", "Slides com IA",
+                      "Diagnóstico", "Configurações"):
             item = QListWidgetItem(label)
             item.setSizeHint(QSize(200, 42))
             self.nav.addItem(item)
@@ -94,16 +98,21 @@ class MainWindow(QMainWindow):
         # ---- paginas
         self.stack = QStackedWidget()
         self.process = ProcessPage()
+        self.captions = CaptionsPage()
+        self.style_page = StylePage()
         self.slides = SlidesPage()
         self.diag = DiagnosticsPage()
         self.settings = SettingsPage()
-        for p in (self.process, self.slides, self.diag, self.settings):
+        for p in (self.process, self.captions, self.style_page, self.slides, self.diag, self.settings):
             self.stack.addWidget(p)
         root.addWidget(self.stack, 1)
 
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
         self.process.busy_changed.connect(self._on_busy)
+        self.process.queue_changed.connect(self.style_page.set_background)
+        self.process.review_requested.connect(self._open_review)
+        self.captions.approved.connect(self._continue_after_review)
 
         self._ai_timer = QTimer(self)
         self._ai_timer.timeout.connect(self._check_ai)
@@ -123,11 +132,22 @@ class MainWindow(QMainWindow):
             self.ai_status.setStyleSheet(f"color: {theme.MUTED};")
             self.ai_status.setToolTip("Abra o Ollama para usar resumo, quiz, cortes e slides com IA.")
 
+    def _open_review(self, out_root: str, name: str) -> None:
+        self.nav.setCurrentRow(1)
+        self.captions.load_root(Path(out_root), select=name)
+
+    def _continue_after_review(self, sources: list) -> None:
+        self.nav.setCurrentRow(0)
+        self.process.continue_after_review([Path(s) for s in sources])
+
     def _on_busy(self, busy: bool) -> None:
         title = APP_NAME + (" — processando…" if busy else "")
         self.setWindowTitle(title)
 
     def closeEvent(self, e) -> None:  # noqa: N802
+        if self.captions.dirty and not self.captions._confirm_discard():
+            e.ignore()
+            return
         if self.process.job is not None:
             ans = QMessageBox.question(
                 self, "Processamento em andamento",

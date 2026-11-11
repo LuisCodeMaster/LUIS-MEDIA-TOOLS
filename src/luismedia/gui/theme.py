@@ -84,10 +84,18 @@ QTableCornerButton::section {{ background: {SURFACE}; border: none; }}
 QProgressBar {{ background: {SURFACE_2}; border: none; border-radius: 6px; height: 12px; text-align: center; color: transparent; }}
 QProgressBar::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_STRONG}, stop:1 {ACCENT}); border-radius: 6px; }}
 
+QTabWidget::pane {{ border: none; }}
+QTabBar::tab {{ background: transparent; color: {MUTED}; padding: 8px 16px; margin-right: 4px;
+               border-bottom: 2px solid transparent; font-weight: 600; }}
+QTabBar::tab:selected {{ color: {TEXT}; border-bottom-color: {ACCENT}; }}
+QTabBar::tab:hover {{ color: {TEXT}; }}
+QSplitter::handle {{ background: transparent; width: 12px; }}
 QScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 4px; min-height: 30px; }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
+QScrollBar::handle:horizontal {{ background: {BORDER}; border-radius: 4px; min-width: 30px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
 """

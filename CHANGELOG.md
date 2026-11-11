@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.1.0] - 2026-11-11
+
+### Novo: legendas profissionais
+- **Velocidade de leitura:** cada legenda fica na tela o tempo necessário para ler a até
+  17 caracteres por segundo (padrão profissional), sem invadir a próxima. Configurável.
+- **Intervalo de 2 quadros** (~0,083 s) entre legendas, para o olho perceber a troca.
+- **Revisar antes de queimar:** a tela **Revisar legendas** mostra o vídeo, a lista de legendas
+  com tempo e caracteres por segundo (alerta quando está rápida demais), edição de texto e
+  tempo, rebalancear linhas, juntar, excluir, localizar e substituir em todas. "Aprovar e gerar
+  vídeos" continua o processamento sem transcrever de novo.
+- **Correções automáticas** (ex.: "wisper = Whisper"), aplicadas em toda aula nova. Dá para
+  adicionar direto do editor ("Lembrar para as próximas aulas") ou em Configurações.
+- **Vocabulário da aula:** nomes, siglas e termos vão para o Whisper (contexto + hotwords) e
+  ele acerta a grafia na primeira vez.
+- **Estilos estilo CapCut:** fonte (Poppins, Anton, Bebas Neue, Archivo Black embutidas, além
+  das do sistema), tamanho, cor, contorno, sombra, brilho neon, caixa de fundo, posição,
+  animação de entrada (fade, pop), palavras por legenda e **destaque da palavra falada**
+  (cor, cor + pop, karaokê revelando palavra por palavra). Modelos prontos para a aula (16:9)
+  e para os cortes (CapCut amarelo, Destaque verde, Karaokê, Caixa minimal, Neon).
+- **Prévia real** na tela de estilos: desenhada pelo mesmo motor (libass) que gera o vídeo.
+
+### Melhorado
+- Checkpoint por etapa: mudar o estilo da legenda refaz só a legenda e o vídeo legendado, sem
+  transcrever de novo; editar o texto refaz legendas, vídeo legendado, cortes e apostila.
+- Cortes 9:16 usam as legendas revisadas e o estilo vertical; apostila usa o texto revisado.
+- O instalador pode ser publicado pela aba Actions ("Run workflow" com "publicar").
+
 ## [1.0.1] - 2026-11-11
 
 ### Novo

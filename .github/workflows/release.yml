@@ -13,6 +13,11 @@ on:
       - ".github/workflows/release.yml"
       - "src/luismedia/gui/**"
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Publicar o instalador numa Release (cria a tag v<versao>)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -90,8 +95,11 @@ jobs:
           retention-days: 30
 
       - name: Publicar na Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publicar
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', steps.v.outputs.version) }}
+          name: LUIS MEDIA TOOLS ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: dist/LUIS-MEDIA-TOOLS-Setup-*.exe
           generate_release_notes: true

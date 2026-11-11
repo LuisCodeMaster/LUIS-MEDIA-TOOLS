@@ -14,6 +14,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .style import PRESETS_V, SubtitleStyle
+
 
 def default_data_dir() -> Path:
     """Pasta de dados do usuario, por sistema operacional (nada de C:\\Users\\ferna)."""
@@ -68,6 +70,7 @@ class WhisperConfig(_Strict):
     language: str = "pt"
     beam_size: int = Field(5, ge=1, le=10)
     vad_filter: bool = True
+    vocabulary: list[str] = []  # nomes, siglas e termos da aula (ajuda o Whisper a acertar)
 
 
 class LLMConfig(_Strict):
@@ -93,7 +96,13 @@ class SubtitleConfig(_Strict):
     max_chars_shorts: int = Field(32, ge=16, le=60)
     min_duration_s: float = Field(0.8, gt=0)
     max_duration_s: float = Field(5.0, gt=0)
+    max_cps: float = Field(17.0, ge=8, le=30)          # velocidade de leitura
+    min_gap_s: float = Field(0.083, ge=0, le=0.5)      # 2 quadros entre legendas
     shorts_version: bool = True
+    review: bool = False                               # parar para revisar antes de queimar
+    replacements: dict[str, str] = {}                  # correcoes automaticas: "Wisper" -> "Whisper"
+    style_h: SubtitleStyle = SubtitleStyle()           # legenda queimada (16:9)
+    style_v: SubtitleStyle = PRESETS_V["CapCut amarelo"].model_copy()  # cortes 9:16
 
 
 class SlidesConfig(_Strict):

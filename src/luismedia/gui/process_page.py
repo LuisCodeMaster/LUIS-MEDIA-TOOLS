@@ -86,6 +86,8 @@ class DropFrame(QFrame):
 
 class ProcessPage(QWidget):
     busy_changed = Signal(bool)
+    queue_changed = Signal(object)        # primeiro video da fila (para a previa de estilo)
+    review_requested = Signal(str, str)   # pasta do lote, nome do video
 
     def __init__(self) -> None:
         super().__init__()
@@ -141,7 +143,7 @@ class ProcessPage(QWidget):
         hh = self.table.horizontalHeader()
         hh.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         hh.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
-        for c, w in ((COL_DUR, 90), (COL_STAGE, 170), (COL_STATUS, 110)):
+        for c, w in ((COL_DUR, 90), (COL_STAGE, 170), (COL_STATUS, 140)):
             hh.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(c, w)
         dl.addWidget(self.table, 1)
@@ -171,8 +173,12 @@ class ProcessPage(QWidget):
         self.btn_open = QPushButton("Abrir pasta de saída")
         self.btn_open.setObjectName("link")
         self.btn_open.setVisible(False)
+        self.btn_review = QPushButton("Revisar legendas agora")
+        self.btn_review.setObjectName("link")
+        self.btn_review.setVisible(False)
         self.btn_log = QPushButton("Mostrar detalhes")
         self.btn_log.setObjectName("link")
+        actions.addWidget(self.btn_review)
         actions.addWidget(self.btn_open)
         actions.addWidget(self.btn_log)
         actions.addStretch(1)
@@ -226,7 +232,20 @@ class ProcessPage(QWidget):
         cut.body.addWidget(self.o_master)
         ol.addWidget(cut)
 
-        vid = Card("Vídeo e legendas")
+        leg = Card("Legendas")
+        self.o_review = toggle("Revisar legendas antes de gerar o vídeo",
+                               "Para depois da transcrição para você corrigir o texto na tela Legendas")
+        self.o_vocab = QLineEdit()
+        self.o_vocab.setPlaceholderText("Ex.: Vygotsky, LGPD, Bhaskara")
+        self.o_vocab.setToolTip("Nomes, siglas e termos técnicos da aula, separados por vírgula. "
+                                "Ajudam o Whisper a escrever certo.")
+        leg.body.addWidget(self.o_review)
+        leg.body.addWidget(QLabel("Vocabulário da aula"))
+        leg.body.addWidget(self.o_vocab)
+        leg.body.addWidget(hint("O estilo (fonte, cores, karaokê) fica na tela Estilo das legendas."))
+        ol.addWidget(leg)
+
+        vid = Card("Vídeo")
         self.o_hardsub = toggle("Queimar legenda no vídeo")
         self.o_shorts = toggle("Gerar legenda versão Shorts")
         self.o_encoder = QComboBox()
@@ -263,6 +282,7 @@ class ProcessPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidget(opts)
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setMinimumWidth(330)
         scroll.setMaximumWidth(380)
         body.addWidget(scroll, 0)
@@ -278,6 +298,7 @@ class ProcessPage(QWidget):
         self.btn_cancel.clicked.connect(self.cancel)
         self.btn_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.out_edit.text())))
         self.btn_log.clicked.connect(self._toggle_log)
+        self.btn_review.clicked.connect(self._request_review)
         self.preset.currentTextChanged.connect(self._apply_preset)
         for w in self._option_widgets():
             sig = getattr(w, "toggled", None) or getattr(w, "valueChanged", None) or w.currentIndexChanged
@@ -302,7 +323,8 @@ class ProcessPage(QWidget):
                         "keep_pauses_longer_than_s": self.o_pause.value()},
             "audio": {"master": self.o_master.isChecked()},
             "render": {"hardsub": self.o_hardsub.isChecked(), "encoder": ENCODERS[self.o_encoder.currentIndex()][1]},
-            "subtitles": {"shorts_version": self.o_shorts.isChecked()},
+            "subtitles": {"shorts_version": self.o_shorts.isChecked(), "review": self.o_review.isChecked()},
+            "whisper": {"vocabulary": [t.strip() for t in self.o_vocab.text().split(",") if t.strip()]},
             "slides": {"enabled": self.o_slides.isChecked(), "handout": self.o_handout.isChecked(),
                        "handout_pdf": self.o_handout.isChecked() and self.o_pdf.isChecked()},
             "llm": {"enabled": self.o_summary.isChecked() or self.o_quiz.isChecked() or clips,
@@ -434,6 +456,7 @@ class ProcessPage(QWidget):
         n = len(self.paths)
         self.lbl_queue.setText(f"Fila de vídeos ({n})" if n else "Fila de vídeos")
         self.empty_hint.setVisible(n == 0)
+        self.queue_changed.emit(self.paths[0] if self.paths else None)
         self.table.setVisible(n > 0)
         busy = self.job is not None
         self.btn_start.setEnabled(n > 0 and not busy)
@@ -441,9 +464,10 @@ class ProcessPage(QWidget):
             b.setEnabled(not busy)
 
     # ------------------------------------------------------------------ execucao
-    def start(self) -> None:
+    def start(self, only: list[Path] | None = None) -> None:
         if not self.paths or self.job:
             return
+        videos = [p for p in self.paths if only is None or p in only]
         out = self.out_edit.text().strip()
         if not out:
             QMessageBox.warning(self, "Pasta de saída", "Escolha onde salvar os resultados.")
@@ -454,16 +478,16 @@ class ProcessPage(QWidget):
             QMessageBox.critical(self, "Configuração inválida", str(exc))
             return
         self._save_ui()
-        for r in range(self.table.rowCount()):
-            for c, t in ((COL_STAGE, ""), (COL_STATUS, "Na fila")):
-                it = QTableWidgetItem(t)
-                self.table.setItem(r, c, it)
+        for f in videos:
+            self._set_cell(f, COL_STAGE, "")
+            self._set_cell(f, COL_STATUS, "Na fila")
         self.log.clear()
         banner(self.result, "info", "")
         self.btn_open.setVisible(False)
         self.progress.setValue(0)
         self.status.setText("Preparando…")
-        self.job = PipelineJob(settings, list(self.paths), Path(out))
+        self.btn_review.setVisible(False)
+        self.job = PipelineJob(settings, videos, Path(out))
         self.job.signals.event.connect(self._on_event)
         self.job.signals.finished.connect(self._on_finished)
         self.job.signals.failed.connect(self._on_failed)
@@ -488,7 +512,8 @@ class ProcessPage(QWidget):
         frac = (pos + min(1.0, float(e.get("progress") or 0))) / len(STAGE_ORDER)
         self.progress.setValue(int(1000 * ((idx - 1) + frac) / total))
         name = STAGE_NAMES.get(stage, stage)
-        f = self.paths[idx - 1] if idx - 1 < len(self.paths) else None
+        jobs = self.job.videos if self.job else self.paths
+        f = jobs[idx - 1] if idx - 1 < len(jobs) else None
         pct = f" {float(e['progress']):.0%}" if e["status"] == "running" and e.get("progress") else ""
         self.status.setText(f"Vídeo {idx} de {total} · {e['video']} · {name}{pct}")
         if f is not None:
@@ -513,9 +538,14 @@ class ProcessPage(QWidget):
         self._finish_ui()
         ok = [r for r in results if r["ok"]]
         bad = [r for r in results if not r["ok"]]
+        review = [r for r in results if r["ok"] and r.get("needs_review")]
+        ok = [r for r in ok if not r.get("needs_review")]
         for r in results:
             f = Path(r["source"])
-            if r["ok"]:
+            if r["ok"] and r.get("needs_review"):
+                self._set_cell(f, COL_STATUS, "Revisar legendas", theme.ACCENT)
+                self._set_cell(f, COL_STAGE, "Aguardando você")
+            elif r["ok"]:
                 warn = len(r["warnings"])
                 self._set_cell(f, COL_STATUS, "Concluído" if not warn else f"OK ({warn} aviso{'s' if warn > 1 else ''})",
                                theme.SUCCESS if not warn else theme.WARNING, "\n".join(r["warnings"]))
@@ -531,6 +561,14 @@ class ProcessPage(QWidget):
             self.status.setText("Cancelado.")
             return
         warnings = sum(len(r["warnings"]) for r in ok)
+        self._review_target = (self.out_edit.text(), Path(review[0]["source"]).stem) if review else None
+        self.btn_review.setVisible(bool(review))
+        if review and not bad:
+            done = f"{len(ok)} pronto(s). " if ok else ""
+            banner(self.result, "info", f"{done}{len(review)} vídeo(s) aguardando a revisão das legendas. "
+                                        "Clique em Revisar legendas agora.")
+            self.status.setText("Aguardando revisão.")
+            return
         if not bad:
             text = f"{len(ok)} vídeo(s) processado(s) com sucesso."
             if warnings:
@@ -540,6 +578,17 @@ class ProcessPage(QWidget):
             lines = "\n".join(f"• {Path(r['source']).name}: {r.get('error')}" for r in bad)
             banner(self.result, "error", f"{len(ok)} ok e {len(bad)} com falha:\n{lines}")
         self.status.setText("Concluído.")
+
+    def _request_review(self) -> None:
+        if getattr(self, "_review_target", None):
+            self.review_requested.emit(*self._review_target)
+
+    def continue_after_review(self, sources: list[Path]) -> None:
+        """Chamado pelo editor: gera o video legendado e os cortes so dos aprovados."""
+        for s in sources:
+            if s not in self.paths:
+                self.add_paths([s])
+        self.start(only=sources)
 
     def _on_failed(self, msg: str) -> None:
         self._finish_ui()
@@ -554,7 +603,8 @@ class ProcessPage(QWidget):
     # ------------------------------------------------------------------ estado
     def _save_ui(self) -> None:
         ui = state.load_ui()
-        ui.update({"preset": self.preset.currentText(), "options": self.options(), "out": self.out_edit.text()})
+        ui.update({"preset": self.preset.currentText(), "options": self.options(), "out": self.out_edit.text(),
+                   "review": self.o_review.isChecked(), "vocab": self.o_vocab.text()})
         state.save_ui(ui)
 
     def _restore(self) -> None:
@@ -573,6 +623,8 @@ class ProcessPage(QWidget):
         self.preset_hint.setText(state.PRESET_HINTS.get(self.preset.currentText(), ""))
         if ui.get("out"):
             self.out_edit.setText(ui["out"])
+        self.o_review.setChecked(bool(ui.get("review")))
+        self.o_vocab.setText(ui.get("vocab", ""))
 
     def debug_state(self) -> str:  # usado nos testes
         return json.dumps(self.options(), sort_keys=True)
