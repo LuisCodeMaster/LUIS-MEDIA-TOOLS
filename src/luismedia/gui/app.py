@@ -158,7 +158,40 @@ def main() -> int:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LuisCodeMaster.LuisMediaTools")
         except Exception:  # noqa: BLE001
             pass
+    if "--selftest" in sys.argv:
+        return selftest()
     app = make_app()
     win = MainWindow()
     win.show()
     return app.exec()
+
+
+def selftest() -> int:
+    """Checagem usada no build do instalador: o .exe abre a janela e acha o FFmpeg embutido."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from ..adapters import ffmpeg as ff
+
+    lines: list[str] = []
+    out = print if sys.stdout is not None else (lambda *a: lines.append(" ".join(map(str, a))))
+    app = make_app(["selftest"])
+    win = MainWindow()
+    win.show()
+    app.processEvents()
+    ok = True
+    for name in ("ffmpeg", "ffprobe"):
+        try:
+            path = ff.find_binary(name)
+        except Exception as exc:  # noqa: BLE001
+            path, ok = f"ERRO: {exc}", False
+        out(f"{name}: {path}")
+    out("subtitles:", ff.has_filter("subtitles"))
+    ok = ok and ff.has_filter("subtitles")
+    out("selftest", "OK" if ok else "FALHOU")
+    if lines:  # .exe sem console: grava o resultado ao lado do executavel
+        log = os.environ.get("LUISMEDIA_SELFTEST_LOG", "selftest.log")
+        with open(log, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    win.close()
+    return 0 if ok else 1

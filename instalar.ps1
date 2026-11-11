@@ -106,6 +106,9 @@ if (-not $SemIA) {
         [void](Instalar-Winget "Ollama.Ollama" "Ollama")
     }
     if (Tem "ollama") {
+        # Roda o Ollama a partir da pasta do usuario: se ele subir o servidor daqui, o
+        # processo nao fica "preso" a pasta do programa (impedindo apagar ou atualizar).
+        Push-Location -LiteralPath $HOME
         $instalados = (& ollama list 2>$null) -join "`n"
         if ($instalados -match [regex]::Escape($ModeloIA)) {
             Ok "Modelo $ModeloIA ja instalado"
@@ -114,6 +117,7 @@ if (-not $SemIA) {
             & ollama pull $ModeloIA
             if ($LASTEXITCODE -eq 0) { Ok "Modelo $ModeloIA pronto" } else { Aviso "Nao consegui baixar o modelo. Abra o Ollama e rode: ollama pull $ModeloIA" }
         }
+        Pop-Location
     }
 }
 
