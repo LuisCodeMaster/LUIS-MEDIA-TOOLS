@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.1] - 2026-11-11
+
+### Corrigido
+- O botão **Iniciar processamento** não fazia nada na versão 1.1.0 (o clique gerava um erro
+  que ficava escondido porque o app roda sem console).
+
+### Melhorado
+- Qualquer erro inesperado agora aparece numa mensagem na tela e é salvo em `erros.log`, na
+  pasta de dados do app (`%LOCALAPPDATA%\LuisMediaTools`).
+- Os testes do app clicam nos botões como o usuário.
+
 ## [1.1.0] - 2026-11-11
 
 ### Novo: legendas profissionais

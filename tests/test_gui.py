@@ -87,7 +87,8 @@ def test_process_page_runs_job_to_the_end(window, tmp_path, lesson_video, monkey
     p.add_paths([lesson_video])
     p.out_edit.setText(str(tmp_path / "saida"))
     assert pump(app, lambda: "m" in p.table.item(0, 1).text(), 30)  # duracao lida em segundo plano
-    p.start()
+    p.btn_start.click()  # pelo botao, como o usuario (o sinal clicked envia um bool)
+    assert p.job is not None, "o botao Iniciar nao iniciou o processamento"
     assert pump(app, lambda: p.job is None, 180)
     assert p.table.item(0, 3).text() == "Concluído", p.result.text()
     assert (tmp_path / "saida" / "aula 01" / "aula 01.edl").exists()
@@ -128,7 +129,7 @@ def test_review_flow_in_the_app(window, tmp_path, lesson_video, monkeypatch):
     assert p.options()["whisper"]["vocabulary"] == ["Whisper", "LGPD"]
     p.add_paths([lesson_video])
     p.out_edit.setText(str(tmp_path / "out"))
-    p.start()
+    p.btn_start.click()
     assert pump(app, lambda: p.job is None, 120)
     assert p.table.item(0, 3).text() == "Revisar legendas" and p.btn_review.isVisibleTo(w)
 

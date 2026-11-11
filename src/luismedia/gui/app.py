@@ -170,6 +170,32 @@ def make_app(argv: list[str] | None = None) -> QApplication:
     return app
 
 
+def install_error_handler() -> None:
+    """Sem console (pythonw/.exe), um erro de Python sumiria em silencio. Aqui ele vira uma
+    mensagem na tela e fica registrado em erros.log na pasta de dados do app."""
+    import traceback
+    from datetime import datetime
+
+    def hook(exc_type, exc, tb) -> None:
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
+        try:
+            log = state.data_dir() / "erros.log"
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} ===\n{text}")
+        except OSError:
+            log = None
+        if sys.stderr is not None:
+            sys.__excepthook__(exc_type, exc, tb)
+        if QApplication.instance() is not None:
+            box = QMessageBox(QMessageBox.Icon.Critical, APP_NAME,
+                              f"Ocorreu um erro inesperado:\n\n{exc}\n\n"
+                              + (f"Detalhes salvos em:\n{log}" if log else ""))
+            box.setDetailedText(text)
+            box.exec()
+
+    sys.excepthook = hook
+
+
 def main() -> int:
     if sys.platform == "win32":
         try:  # icone proprio na barra de tarefas (sem isso aparece o do Python)
@@ -181,6 +207,7 @@ def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
     app = make_app()
+    install_error_handler()
     win = MainWindow()
     win.show()
     return app.exec()
