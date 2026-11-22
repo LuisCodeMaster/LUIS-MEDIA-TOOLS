@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 hidden = collect_submodules("luismedia") + collect_submodules("faster_whisper")
 datas = (collect_data_files("faster_whisper")  # assets do VAD (silero)
-         + collect_data_files("luismedia", includes=["profiles/*.yaml", "assets/fonts/*"]))
+         + collect_data_files("luismedia", includes=["profiles/*.yaml", "assets/fonts/*", "assets/emoji/*"]))
 
 a = Analysis(
     ["entry.py"],

@@ -18,7 +18,16 @@ from ..core.errors import ProcessFailed, ProcessTimeout
 from ..core.logging import get_logger
 from ..core.models import MediaInfo, SlideFrame, Span
 from ..core.segmentation import SegmentationRules, segment_words
-from ..core.style import SubtitleStyle, fonts_dir, sample_segments, write_styled_ass
+from ..core.style import (
+    SAMPLE_KEYWORDS,
+    EmojiShow,
+    SubtitleStyle,
+    emoji_overlay,
+    emoji_plan,
+    fonts_dir,
+    sample_segments,
+    write_styled_ass,
+)
 
 log = get_logger("stages.media")
 
@@ -193,7 +202,7 @@ def subtitles_filter(ass_name: str, work: Path) -> str:
 
 
 def render_style_preview(style: SubtitleStyle, out_png: Path, *, width: int, height: int,
-                         background: Path | None = None, at: float = 1.05) -> Path:
+                         background: Path | None = None, at: float = 0.7) -> Path:
     """Previa fiel: o proprio libass desenha a legenda de exemplo sobre um quadro do video."""
     work = out_png.parent
     work.mkdir(parents=True, exist_ok=True)
@@ -202,29 +211,35 @@ def render_style_preview(style: SubtitleStyle, out_png: Path, *, width: int, hei
         vertical = height > width
         rules = SegmentationRules(max_words=style.max_words, max_duration=3.0)
         sample = segment_words(sample[0].words, rules, shorts=vertical)
-    write_styled_ass(sample, work / "preview.ass", style, width, height)
+    write_styled_ass(sample, work / "preview.ass", style, width, height, keywords=SAMPLE_KEYWORDS)
+    plan = emoji_plan(sample, style, width, height, SAMPLE_KEYWORDS)
     scale = (f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},"
-             "eq=brightness=-0.06")
+             "eq=brightness=-0.06,setsar=1")
     if background is not None:
-        src = ["-ss", "1", "-i", str(background)]
+        src = ["-ss", "1", "-t", "3", "-i", str(background)]
     else:
-        src = ["-f", "lavfi", "-i", f"gradients=s={width}x{height}:c0=0x1e293b:c1=0x4338ca:d=2"]
+        src = ["-f", "lavfi", "-i", f"gradients=s={width}x{height}:c0=0x1e293b:c1=0x4338ca:d=3"]
+    extra, emo = emoji_overlay(plan, "subd", "vout", 1)
     # legenda aplicada ANTES do trim: o quadro escolhido mostra a legenda no instante `at`
-    ff.run_ffmpeg([*src, "-vf", f"{scale},{subtitles_filter('preview.ass', work)},trim=start={at}",
+    graph = f"[0:v]{scale},{subtitles_filter('preview.ass', work)}[subd];{emo};[vout]trim=start={at}[final]"
+    ff.run_ffmpeg([*src, *extra, "-filter_complex", graph, "-map", "[final]",
                   "-frames:v", "1", str(out_png.resolve())], cwd=work, timeout_s=30, stall_timeout_s=30)
     return out_png
 
 
 def burn_subtitles(src: MediaInfo, ass: Path, out: Path, *, encoder: Encoder, crf: int,
-                   work: Path) -> Path:
+                   work: Path, emojis: list[EmojiShow] | None = None) -> Path:
     ff.require_filter("subtitles", "legenda queimada")
     local = work / "subs.ass"
     shutil.copyfile(ass, local)
-    vf = subtitles_filter("subs.ass", work)
+    extra, emo = emoji_overlay(emojis or [], "subd", "vout", 1)
+    graph = f"[0:v]{subtitles_filter('subs.ass', work)}[subd];{emo}"
+    script = work / "hardsub.filtergraph"
+    script.write_text(graph, encoding="utf-8")  # pode ficar longo com muitos emojis
 
     def _args(tmp: Path, enc: Encoder) -> list[str]:
-        return ["-i", str(src.path), "-vf", vf, *ff.encoder_args(enc, crf),
-                "-c:a", "copy", "-movflags", "+faststart", str(tmp.resolve())]
+        return ["-i", str(src.path), *extra, *ff.filter_script_args(script), "-map", "[vout]", "-map", "0:a?",
+                *ff.encoder_args(enc, crf), "-c:a", "copy", "-movflags", "+faststart", str(tmp.resolve())]
 
     try:
         return ff.run_to_file(out, lambda t: _args(t, encoder), cwd=work,

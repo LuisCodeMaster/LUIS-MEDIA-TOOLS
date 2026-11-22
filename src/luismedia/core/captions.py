@@ -21,6 +21,7 @@ class CaptionDoc(BaseModel):
     width: int = 1920
     height: int = 1080
     approved: bool = False
+    keywords: list[str] = []  # palavras-chave em destaque (sugeridas pela IA, editaveis)
     captions: list[Segment]
 
     @classmethod

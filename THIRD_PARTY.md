@@ -12,6 +12,7 @@ repositorio e mantem as suas proprias licencas.
 | [Llama 3.2](https://www.llama.com/llama3_2/license/) | Modelo de IA padrao | Llama 3.2 Community License |
 | [PySide6 / Qt](https://doc.qt.io/qtforpython-6/licenses.html) | Interface do app | LGPL v3 |
 | Fontes [Poppins](https://fonts.google.com/specimen/Poppins), [Anton](https://fonts.google.com/specimen/Anton), [Bebas Neue](https://fonts.google.com/specimen/Bebas+Neue), [Archivo Black](https://fonts.google.com/specimen/Archivo+Black) | Estilos de legenda | SIL Open Font License 1.1 (textos em `src/luismedia/assets/fonts/`) |
+| [Twemoji](https://github.com/jdecked/twemoji) (Twitter/X e colaboradores) | Emojis automáticos nas legendas | CC-BY 4.0 (texto em `src/luismedia/assets/emoji/`) |
 | [pydantic](https://github.com/pydantic/pydantic) | Validacao | MIT |
 | [PyYAML](https://github.com/yaml/pyyaml) | Perfis | MIT |
 

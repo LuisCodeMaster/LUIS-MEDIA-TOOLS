@@ -194,6 +194,13 @@ class CaptionsPage(QWidget):
         fr.body.addWidget(self.remember)
         fr.body.addWidget(self.btn_replace)
         rl.addWidget(fr)
+
+        kw = Card("Palavras-chave em destaque")
+        self.keywords = QLineEdit()
+        self.keywords.setPlaceholderText("Separadas por vírgula (ex.: Python, função, variável)")
+        kw.body.addWidget(self.keywords)
+        kw.body.addWidget(hint("Usadas quando o estilo tem \"Destacar palavras-chave\". A IA sugere; você ajusta."))
+        rl.addWidget(kw)
         rl.addStretch(1)
         self.btn_save = QPushButton("Salvar")
         self.btn_approve = QPushButton("Aprovar e gerar vídeos")
@@ -215,12 +222,13 @@ class CaptionsPage(QWidget):
         self.btn_delete.clicked.connect(self._delete)
         self.btn_replace.clicked.connect(self._replace_all)
         self.btn_save.clicked.connect(self.save)
+        self.keywords.textEdited.connect(lambda _t: self._keywords_edited())
         self.btn_approve.clicked.connect(self._approve)
         self._set_enabled(False)
 
     def _set_enabled(self, on: bool) -> None:
         for w in (self.btn_apply, self.btn_balance, self.btn_merge, self.btn_delete, self.btn_replace,
-                  self.btn_save, self.btn_approve, self.text, self.start, self.end):
+                  self.btn_save, self.btn_approve, self.text, self.start, self.end, self.keywords):
             w.setEnabled(on)
 
     # ------------------------------------------------------------------ carregar
@@ -265,6 +273,9 @@ class CaptionsPage(QWidget):
         if self.doc_path and path != self.doc_path and not self._confirm_discard():
             return
         self.doc_path, self.doc, self.dirty = path, CaptionDoc.load(path), False
+        self.keywords.blockSignals(True)
+        self.keywords.setText(", ".join(self.doc.keywords))
+        self.keywords.blockSignals(False)
         self._fill_table()
         self._set_enabled(True)
         if self.player is not None and Path(self.doc.video).exists():
@@ -363,9 +374,20 @@ class CaptionsPage(QWidget):
         banner(self.msg, "ok", f"{n} legenda(s) corrigida(s).{extra}")
 
     # ------------------------------------------------------------------ salvar
+    def keyword_list(self) -> list[str]:
+        seen: dict[str, None] = {}
+        for k in self.keywords.text().split(","):
+            if k.strip():
+                seen.setdefault(k.strip(), None)
+        return list(seen)[:30]
+
+    def _keywords_edited(self) -> None:
+        self.dirty = True
+
     def save(self) -> bool:
         if not self.doc or not self.doc_path:
             return False
+        self.doc.keywords = self.keyword_list()
         self.doc.save(self.doc_path)
         captions_edited(self.doc_path.parent.parent)
         self.dirty = False

@@ -14,9 +14,17 @@ from ..adapters import ffmpeg as ff
 from ..adapters.ollama import OllamaClient
 from ..core.captions import clip_window, realign_words
 from ..core.config import Encoder
-from ..core.models import ClipPlan, ClipSuggestion, MediaInfo, Quiz, Segment, Transcript
+from ..core.models import (
+    ClipPlan,
+    ClipSuggestion,
+    KeywordList,
+    MediaInfo,
+    Quiz,
+    Segment,
+    Transcript,
+)
 from ..core.segmentation import SegmentationRules, segment_words
-from ..core.style import SubtitleStyle, write_styled_ass
+from ..core.style import SubtitleStyle, emoji_overlay, emoji_plan, write_styled_ass
 
 SYSTEM = ("Voce e um assistente pedagogico. Responda sempre em portugues do Brasil, "
           "com base APENAS no conteudo fornecido. Nao invente fatos.")
@@ -51,6 +59,22 @@ def summary(client: OllamaClient, material: str, title: str) -> str:
               "## Objetivo da aula\n## Pontos-chave\n## Conclusao pratica\n\n"
               f"Conteudo:\n{material}")
     return client.generate(prompt, system=SYSTEM).strip()
+
+
+def keywords(client: OllamaClient, text: str, max_chars: int, n: int = 15) -> list[str]:
+    """Termos mais importantes da aula (conceitos, nomes, numeros-chave) para destaque visual."""
+    prompt = (f"Leia a transcricao de aula abaixo e escolha ate {n} palavras-chave que merecem "
+              "destaque visual na legenda: conceitos centrais, nomes proprios, termos tecnicos e "
+              "palavras de impacto. Prefira palavras unicas, exatamente como aparecem no texto. "
+              "Nao inclua palavras comuns (artigos, verbos genericos).\n\n" + text[:max_chars])
+    words = client.generate_model(prompt, KeywordList).keywords
+    seen, out = set(), []
+    for w in words:
+        w = w.strip().strip(".,;:!?\"'")
+        if w and w.lower() not in seen and len(w) <= 40:
+            seen.add(w.lower())
+            out.append(w)
+    return out[:n]
 
 
 def quiz(client: OllamaClient, material: str, n: int = 5) -> Quiz:
@@ -113,7 +137,7 @@ def pick_clips(client: OllamaClient, tr: Transcript, n: int, max_chars: int) -> 
 
 def render_vertical_clip(src: MediaInfo, clip: ClipSuggestion, captions: list[Segment], out: Path,
                          *, encoder: Encoder, crf: int, rules: SegmentationRules,
-                         style: SubtitleStyle) -> Path:
+                         style: SubtitleStyle, keywords: list[str] | None = None) -> Path:
     """Corte 9:16: fundo desfocado + video centralizado + legenda no estilo vertical
     (ex.: CapCut com palavra destacada), feita a partir das legendas ja revisadas."""
     from .media import subtitles_filter
@@ -128,15 +152,16 @@ def render_vertical_clip(src: MediaInfo, clip: ClipSuggestion, captions: list[Se
         caps = [c.model_copy(update={"words": [w for w in words if c.start - 0.01 <= w.start < c.end]})
                 for c in caps]
     ass_name = out.stem + ".ass"
-    write_styled_ass(caps, work / ass_name, style, 1080, 1920)
+    write_styled_ass(caps, work / ass_name, style, 1080, 1920, keywords=keywords)
+    extra, emo = emoji_overlay(emoji_plan(caps, style, 1080, 1920, keywords), "subd", "v", 1)
     graph = ("[0:v]split=2[bg][fg];"
              "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:6[bgb];"
              "[fg]scale=1080:-2:force_original_aspect_ratio=decrease[fgs];"
-             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,{subtitles_filter(ass_name, work)}[v]")
+             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,{subtitles_filter(ass_name, work)}[subd];{emo}")
     try:
         return ff.run_to_file(
             out,
-            lambda tmp: ["-ss", f"{clip.start:.3f}", "-t", f"{dur:.3f}", "-i", str(src.path),
+            lambda tmp: ["-ss", f"{clip.start:.3f}", "-t", f"{dur:.3f}", "-i", str(src.path), *extra,
                          "-filter_complex", graph, "-map", "[v]", "-map", "0:a?",
                          *ff.encoder_args(encoder, crf), "-c:a", "aac", "-b:a", "192k",
                          "-movflags", "+faststart", str(tmp.resolve())],

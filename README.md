@@ -16,7 +16,7 @@ Nada sai do seu computador: a transcrição usa o Whisper e a IA usa o Ollama, a
 | **Legendas profissionais** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, até 17 caracteres por segundo, 2 quadros entre legendas, sem cortar frases em "de", "que" ou "para". Inclui versão Shorts |
 | **Revisão** | Editor com o vídeo para corrigir texto e tempo antes de gerar o vídeo legendado, com localizar e substituir e correções automáticas para as próximas aulas |
 | **Vocabulário da aula** | Nomes, siglas e termos passados ao Whisper para ele acertar a grafia |
-| **Estilos estilo CapCut** | Fontes, cores, contorno, caixa, neon, posição, animação e destaque da palavra falada (karaokê), com prévia real e modelos prontos |
+| **Estilos estilo CapCut** | Fontes, cores, gradiente, duas cores, contorno, caixa, neon, animações (pop, quicar, deslizar, máquina de escrever), caixa colorida na palavra falada, palavras-chave da IA, emojis automáticos, posição livre arrastando na prévia e modelos próprios exportáveis |
 | **Masterização de voz** | Equalização e loudness em duas passadas, no alvo de **-14 LUFS** (padrão de YouTube e Spotify) |
 | **Slides e apostila** | Detecta cada troca de slide com o instante exato e monta uma apostila em HTML e PDF com o slide e o que foi falado sobre ele |
 | **Resumo e quiz (IA)** | Resumo executivo em Markdown e quiz interativo em HTML com placar |
@@ -68,9 +68,10 @@ A janela tem seis telas:
 - **Revisar legendas:** vídeo + lista de legendas com alerta de leitura rápida; corrija texto e
   tempo, rebalanceie linhas e use localizar e substituir. "Aprovar e gerar vídeos" continua de
   onde parou, sem transcrever de novo.
-- **Estilo das legendas:** modelos prontos e todos os ajustes (fonte, cores, contorno, caixa,
-  neon, posição, animação, palavras por legenda, destaque da palavra falada) para a aula 16:9
-  e para os cortes 9:16, com prévia desenhada pelo mesmo motor que gera o vídeo.
+- **Estilo das legendas:** modelos prontos e os seus (salvar, exportar, importar) e todos os
+  ajustes (fonte, cores, gradiente, contorno, caixa, neon, posição livre arrastando na prévia,
+  animação, destaque da palavra falada, palavras-chave e emojis) para a aula 16:9 e para os
+  cortes 9:16, com prévia desenhada pelo mesmo motor que gera o vídeo.
 - **Slides com IA:** escreva o tema, a IA monta o roteiro, você ajusta o texto e gera uma
   apresentação 16:9 interativa (laser, desenho, notas, visão geral, exportar PDF).
 - **Diagnóstico:** confere FFmpeg, placa de vídeo, Whisper, Ollama e navegador, explica como
