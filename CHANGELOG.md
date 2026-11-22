@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0] - 2026-11-22
+
+### Novo: legendas estilo CapCut
+- **Novas animações de entrada:** quicar (bounce), deslizar de baixo e máquina de escrever.
+- **Caixa colorida na palavra falada** (efeito marca-texto), só atrás da palavra do momento.
+- **Palavras-chave destacadas pela IA:** o Ollama escolhe os termos importantes da aula, que
+  ganham cor e tamanho próprios. Somam-se ao vocabulário e dá para editar em **Revisar legendas**.
+- **Emojis automáticos** (🔥💡✅💰⏰📚…) acima da legenda quando ela fala do assunto, também nos cortes.
+- **Gradiente** no texto e **duas cores alternadas** entre legendas.
+- **Modelos próprios:** salve o estilo com um nome, exclua, exporte e importe (`.estilo.json`)
+  para usar em outro computador ou mandar para clientes.
+- **Posição livre:** arraste a legenda na prévia para colocá-la onde quiser.
+- Novos modelos prontos: Marca-texto, Gradiente fogo, Duas cores, Máquina de escrever.
+
 ## [1.1.2] - 2026-11-22
 
 ### Corrigido

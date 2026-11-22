@@ -34,12 +34,15 @@ class Task(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            result = self.fn(self.signals.progress.emit)
-        except Exception as exc:  # noqa: BLE001 - qualquer erro vira mensagem na tela
-            log.error("tarefa falhou", extra={"error": str(exc), "trace": traceback.format_exc()})
-            self.signals.failed.emit(str(exc) or exc.__class__.__name__)
-        else:
-            self.signals.done.emit(result)
+            try:
+                result = self.fn(self.signals.progress.emit)
+            except Exception as exc:  # noqa: BLE001 - qualquer erro vira mensagem na tela
+                log.error("tarefa falhou", extra={"error": str(exc), "trace": traceback.format_exc()})
+                self.signals.failed.emit(str(exc) or exc.__class__.__name__)
+            else:
+                self.signals.done.emit(result)
+        except RuntimeError:  # a janela fechou antes da tarefa terminar (ex.: previa)
+            _alive.discard(self)
 
 
 _alive: set[Task] = set()  # evita o coletor de lixo apagar a tarefa antes do sinal chegar

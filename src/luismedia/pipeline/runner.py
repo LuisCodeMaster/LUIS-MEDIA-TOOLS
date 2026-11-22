@@ -44,7 +44,7 @@ from ..core.errors import Cancelled, LuisMediaError
 from ..core.logging import get_logger
 from ..core.models import MediaInfo, SlideFrame, Transcript, Word
 from ..core.segmentation import SegmentationRules, segment_transcript, segment_words
-from ..core.style import write_styled_ass
+from ..core.style import emoji_plan, write_styled_ass
 from ..stages import ai, editorial, media
 
 log = get_logger("pipeline")
@@ -83,7 +83,8 @@ class VideoResult:
 # Quais etapas precisam ser refeitas quando outra roda de novo
 DEPENDS: dict[str, list[str]] = {
     "autocut": [], "audio": ["autocut"], "transcricao": ["audio"], "masterizacao": ["audio"],
-    "legendas": ["transcricao"], "hardsub": ["legendas"], "resumo": ["transcricao"],
+    "palavras-chave": ["transcricao"],
+    "legendas": ["transcricao", "palavras-chave"], "hardsub": ["legendas"], "resumo": ["transcricao"],
     "quiz": ["transcricao"], "cortes": ["legendas"], "slides": ["autocut"],
     "apostila": ["slides", "legendas", "resumo"],
 }
@@ -101,7 +102,9 @@ def stage_config(settings: Settings, stage: str) -> str:
         "transcricao": [s.whisper, s.subtitles.model_dump(exclude={"style_h", "style_v", "review",
                                                                    "shorts_version"})],
         "masterizacao": [s.audio],
-        "legendas": [s.subtitles.style_h, s.subtitles.shorts_version, s.subtitles.max_chars_shorts],
+        "palavras-chave": [s.llm.model],
+        "legendas": [s.subtitles.style_h, s.subtitles.shorts_version, s.subtitles.max_chars_shorts,
+                     s.whisper.vocabulary],
         "hardsub": [s.render],
         "resumo": [s.llm.model, s.llm.max_context_chars],
         "quiz": [s.llm.model, s.llm.max_context_chars],
@@ -387,6 +390,17 @@ class Pipeline:
                 else:
                     llm_ok = True
                     self._text_ai(step, name, transcript, dirs)
+                    if self.s.subtitles.style_h.keywords or self.s.subtitles.style_v.keywords:
+                        def _keywords() -> dict[str, str]:
+                            kws = ai.keywords(self.llm, transcript.plain_text(), self.s.llm.max_context_chars)
+                            d = CaptionDoc.load(captions_path)
+                            if not d.keywords:  # nao sobrescreve o que o usuario editou
+                                d.keywords = kws
+                                d.save(captions_path)
+                            p = dirs["legendas"] / f"{name}.keywords.json"
+                            p.write_text(json.dumps(kws, ensure_ascii=False), encoding="utf-8")
+                            return {"keywords": str(p)}
+                        step("palavras-chave", _keywords, required=False)
 
             # 6. Revisao: para aqui ate o usuario aprovar no app -------------
             doc = CaptionDoc.load(captions_path)
@@ -404,7 +418,7 @@ class Pipeline:
                     "srt": str(subtitles.write_srt(d.captions, leg / f"{name}.srt")),
                     "vtt": str(subtitles.write_vtt(d.captions, leg / f"{name}.vtt")),
                     "ass": str(write_styled_ass(d.captions, leg / f"{name}.ass", self.s.subtitles.style_h,
-                                                d.width, d.height)),
+                                                d.width, d.height, keywords=self._keywords(d))),
                 }
                 if self.s.subtitles.shorts_version:
                     shorts = segment_words(caption_words(d), self.rules, shorts=True)
@@ -415,9 +429,13 @@ class Pipeline:
                 return result
 
             if self.s.render.hardsub:
-                step("hardsub", lambda: {"video_legendado": str(media.burn_subtitles(
-                    target, Path(result.outputs["ass"]), out / f"{name}_LEGENDADO.mp4",
-                    encoder=self.encoder, crf=self.s.render.crf, work=work))}, required=False)
+                def _hardsub() -> dict[str, str]:
+                    d = CaptionDoc.load(captions_path)
+                    emojis = emoji_plan(d.captions, self.s.subtitles.style_h, d.width, d.height, self._keywords(d))
+                    return {"video_legendado": str(media.burn_subtitles(
+                        target, Path(result.outputs["ass"]), out / f"{name}_LEGENDADO.mp4",
+                        encoder=self.encoder, crf=self.s.render.crf, work=work, emojis=emojis))}
+                step("hardsub", _hardsub, required=False)
 
             # 8. Cortes 9:16 (do texto revisado, com o estilo vertical) ------
             if llm_ok and self.s.llm.clips:
@@ -430,7 +448,7 @@ class Pipeline:
                         dst = dirs["cortes"] / f"{name}_corte_{i}_{slug or 'trecho'}.mp4"
                         ai.render_vertical_clip(target, clip, d.captions, dst, encoder=self.encoder,
                                                 crf=self.s.render.crf, rules=self.rules_v,
-                                                style=self.s.subtitles.style_v)
+                                                style=self.s.subtitles.style_v, keywords=self._keywords(d))
                         res[f"corte_{i}"] = str(dst)
                     return res
                 step("cortes", _clips, required=False)
@@ -477,6 +495,10 @@ class Pipeline:
         finally:
             if not self.s.keep_intermediates:
                 shutil.rmtree(work, ignore_errors=True)
+
+    def _keywords(self, doc: CaptionDoc) -> list[str]:
+        """Palavras-chave da legenda (IA ou editadas) + vocabulario da aula."""
+        return list(dict.fromkeys([*doc.keywords, *self.s.whisper.vocabulary]))
 
     def _text_ai(self, step, name: str, tr: Transcript, dirs: dict[str, Path]) -> None:
         c = self.s.llm

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -143,7 +144,50 @@ def test_review_flow_in_the_app(window, tmp_path, lesson_video, monkeypatch):
     ed.table.selectRow(0)
     ed.text.setPlainText("Olá, turma do Whisper!")
     ed.btn_apply.click()
+    ed.keywords.setText("Whisper, turma, Whisper")
+    assert ed.keyword_list() == ["Whisper", "turma"]
     ed.btn_approve.click()  # volta para Processar e gera o video legendado
     assert pump(app, lambda: p.job is None and p.table.item(0, 3).text() == "Concluído", 120), p.result.text()
     srt = next((tmp_path / "out").glob("*/legendas/*.srt")).read_text(encoding="utf-8")
     assert "Olá, turma do Whisper!" in srt and whisper.calls == 1
+    doc = next((tmp_path / "out").glob("*/legendas/*.captions.json"))
+    assert json.loads(doc.read_text(encoding="utf-8"))["keywords"] == ["Whisper", "turma"]
+
+
+def test_style_page_capcut_controls_templates_and_drag(window, tmp_path):
+    app, w = window
+    ed = w.style_page.v
+    ed.preset.setCurrentText("Marca-texto")
+    s = ed.style()
+    assert s.highlight == "box" and s.animation == "bounce" and s.emojis
+    ed.gradient.setChecked(True)
+    assert ed.style().gradient and ed.preset.currentText() == "Personalizado"
+
+    # modelo proprio: salvar, aparece com estrela, exportar, excluir, importar
+    ed.save_user_preset("Cliente X")
+    assert ed.preset.currentText() == "★ Cliente X" and ed.btn_delete.isEnabled()
+    assert w.style_page.h.preset.findText("★ Cliente X") < 0  # modelos 9:16 e 16:9 separados
+    f = tmp_path / "x.estilo.json"
+    ed.export_style(f, "Cliente X")
+    ed.delete_user_preset("Cliente X")
+    assert ed.preset.findText("★ Cliente X") < 0
+    assert ed.import_style(f) == "Cliente X"
+    assert ed.preset.currentText() == "★ Cliente X" and ed.style().gradient
+
+    # arrastar na previa muda para posicao livre
+    ed.preview.set_image(_pix(270, 480))
+    ed.preview.resize(300, 500)
+    app.processEvents()
+    r = ed.preview.image_rect()
+    ed.preview.drag_to(r.left() + r.width() * 0.3, r.top() + r.height() * 0.2, True)
+    st = ed.style()
+    assert st.position == "custom" and abs(st.pos_x - 30) < 2 and abs(st.pos_y - 20) < 2
+    assert ed.pos_x.isEnabled() and not ed.margin.isEnabled()
+
+
+def _pix(wd, ht):
+    from PySide6.QtGui import QColor, QPixmap
+
+    p = QPixmap(wd, ht)
+    p.fill(QColor("#334"))
+    return p

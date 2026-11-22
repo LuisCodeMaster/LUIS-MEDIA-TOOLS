@@ -76,6 +76,12 @@ class ClipPlan(BaseModel):
     clips: list[ClipSuggestion]
 
 
+class KeywordList(BaseModel):
+    """Palavras-chave escolhidas pela IA para destacar nas legendas."""
+
+    keywords: list[str] = Field(min_length=1, max_length=30)
+
+
 class QuizQuestion(BaseModel):
     question: str = Field(min_length=5)
     correct: str = Field(min_length=1)
