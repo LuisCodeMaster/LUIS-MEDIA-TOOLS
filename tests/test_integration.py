@@ -223,7 +223,7 @@ def test_missing_subtitles_filter_is_clear_warning(tmp_path, lesson_video, monke
 def test_whisper_receives_decoded_audio_not_a_path(tmp_path, lesson_video):
     """Regressao: o faster-whisper decodifica com PyAV e quebra no PyAV 14+
     ("metadata_errors"). O adapter precisa entregar o audio ja decodificado."""
-    import numpy as np
+    np = pytest.importorskip("numpy")  # vem com o extra [whisper]
 
     from luismedia.adapters import whisper as wh
     from luismedia.core.config import WhisperConfig
