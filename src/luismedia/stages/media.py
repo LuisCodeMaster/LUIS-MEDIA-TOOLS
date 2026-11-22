@@ -16,7 +16,7 @@ from ..adapters import ffmpeg as ff
 from ..core.config import AudioConfig, AutoCutConfig, Encoder
 from ..core.errors import ProcessFailed, ProcessTimeout
 from ..core.logging import get_logger
-from ..core.models import MediaInfo, SlideFrame, Span
+from ..core.models import MediaInfo, Segment, SlideFrame, Span
 from ..core.segmentation import SegmentationRules, segment_words
 from ..core.style import (
     SAMPLE_KEYWORDS,
@@ -201,30 +201,97 @@ def subtitles_filter(ass_name: str, work: Path) -> str:
     return f"subtitles={ass_name}{prepare_fonts(work)}"
 
 
-def render_style_preview(style: SubtitleStyle, out_png: Path, *, width: int, height: int,
-                         background: Path | None = None, at: float = 0.7) -> Path:
-    """Previa fiel: o proprio libass desenha a legenda de exemplo sobre um quadro do video."""
-    work = out_png.parent
-    work.mkdir(parents=True, exist_ok=True)
-    sample = sample_segments()
-    if style.max_words:  # mostra so o grupo de palavras que estaria na tela (como nos cortes)
-        vertical = height > width
+PREVIEW_CLIP_SECONDS = 4.0
+PREVIEW_FPS = 25
+
+
+def preview_segments(style: SubtitleStyle, width: int, height: int, start: float, duration: float,
+                     segments: list[Segment] | None = None) -> list[Segment]:
+    """Legendas que aparecem na janela [start, start+duration], com o tempo comecando em 0.
+
+    Sem legendas reais (video ainda nao transcrito) usa a frase de exemplo a partir do inicio.
+    """
+    if segments:
+        out = []
+        for seg in segments:
+            if seg.end <= start or seg.start >= start + duration:
+                continue
+            words = [w.model_copy(update={"start": max(0.0, w.start - start), "end": max(0.01, w.end - start)})
+                     for w in seg.words]
+            out.append(seg.model_copy(update={"start": max(0.0, seg.start - start),
+                                              "end": seg.end - start, "words": words}))
+    else:
+        out = sample_segments(min(duration, 3.0))
+    if style.max_words and out and all(s.words for s in out):  # grupo de palavras como nos cortes
         rules = SegmentationRules(max_words=style.max_words, max_duration=3.0)
-        sample = segment_words(sample[0].words, rules, shorts=vertical)
-    write_styled_ass(sample, work / "preview.ass", style, width, height, keywords=SAMPLE_KEYWORDS)
-    plan = emoji_plan(sample, style, width, height, SAMPLE_KEYWORDS)
+        out = [g for s in out for g in segment_words(s.words, rules, shorts=height > width)]
+    return out
+
+
+def _preview_graph(style: SubtitleStyle, work: Path, *, width: int, height: int, background: Path | None,
+                   start: float, duration: float, segments: list[Segment] | None,
+                   keywords: list[str] | None) -> tuple[list[str], str]:
+    # legenda que ja estava na tela no momento escolhido: comeca o trecho no inicio dela (e corta
+    # depois), senao a animacao de entrada apareceria de novo no meio da frase
+    lead = 0.0
+    if segments:
+        on = [sg.start for sg in segments if sg.start < start < sg.end]
+        lead = min(3.0, start - min(on)) if on else 0.0
+    start, duration = start - lead, duration + lead
+    segs = preview_segments(style, width, height, start, duration, segments)
+    kws = keywords if keywords is not None else ([] if segments else SAMPLE_KEYWORDS)
+    write_styled_ass(segs, work / "preview.ass", style, width, height, keywords=kws)
+    plan = emoji_plan(segs, style, width, height, kws)
     scale = (f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},"
              "eq=brightness=-0.06,setsar=1")
     if background is not None:
-        src = ["-ss", "1", "-t", "3", "-i", str(background)]
+        src = ["-ss", f"{max(0.0, start):.3f}", "-t", f"{duration:.3f}", "-i", str(background)]
     else:
-        src = ["-f", "lavfi", "-i", f"gradients=s={width}x{height}:c0=0x1e293b:c1=0x4338ca:d=3"]
+        src = ["-f", "lavfi", "-i", f"gradients=s={width}x{height}:c0=0x1e293b:c1=0x4338ca:d={duration:.3f}"]
     extra, emo = emoji_overlay(plan, "subd", "vout", 1)
+    graph = f"[0:v]{scale},{subtitles_filter('preview.ass', work)}[subd];{emo}"
+    if lead:
+        graph = graph.replace("[vout]", "[vlead]") + f";[vlead]trim=start={lead:.3f},setpts=PTS-STARTPTS[vout]"
+    return [*src, *extra], graph
+
+
+def render_style_preview(style: SubtitleStyle, out_png: Path, *, width: int, height: int,
+                         background: Path | None = None, at: float = 0.7, start: float = 1.0,
+                         segments: list[Segment] | None = None, keywords: list[str] | None = None) -> Path:
+    """Previa fiel (um quadro): o proprio libass desenha a legenda sobre o video.
+
+    ``start`` e o momento do video; ``at`` e quantos segundos depois dele o quadro e tirado
+    (com a frase de exemplo, 0.7 s = instante em que a 2a palavra e falada).
+    """
+    work = out_png.parent
+    work.mkdir(parents=True, exist_ok=True)
+    if segments:
+        at = 0.0  # com legendas reais: exatamente o quadro do momento escolhido
+    inputs, graph = _preview_graph(style, work, width=width, height=height, background=background,
+                                   start=start, duration=3.0, segments=segments, keywords=keywords)
     # legenda aplicada ANTES do trim: o quadro escolhido mostra a legenda no instante `at`
-    graph = f"[0:v]{scale},{subtitles_filter('preview.ass', work)}[subd];{emo};[vout]trim=start={at}[final]"
-    ff.run_ffmpeg([*src, *extra, "-filter_complex", graph, "-map", "[final]",
-                  "-frames:v", "1", str(out_png.resolve())], cwd=work, timeout_s=30, stall_timeout_s=30)
+    graph += f";[vout]trim=start={at}[final]"
+    ff.run_ffmpeg([*inputs, "-filter_complex", graph, "-map", "[final]",
+                   "-frames:v", "1", str(out_png.resolve())], cwd=work, timeout_s=30, stall_timeout_s=30)
     return out_png
+
+
+def render_style_clip(style: SubtitleStyle, out_dir: Path, *, width: int, height: int,
+                      background: Path | None = None, start: float = 0.0,
+                      duration: float = PREVIEW_CLIP_SECONDS, segments: list[Segment] | None = None,
+                      keywords: list[str] | None = None, fps: int = PREVIEW_FPS) -> list[Path]:
+    """Trecho animado da previa (quadros JPEG) a partir de ``start``, com animacoes, destaque
+    da palavra falada e emojis exatamente como no video final."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("f*.jpg"):
+        old.unlink()
+    inputs, graph = _preview_graph(style, out_dir, width=width, height=height, background=background,
+                                   start=start, duration=duration, segments=segments, keywords=keywords)
+    graph += f";[vout]fps={fps}[final]"
+    ff.run_ffmpeg([*inputs, "-filter_complex", graph, "-map", "[final]", "-t", f"{duration:.3f}",
+                   "-q:v", "4", str((out_dir / "f%04d.jpg").resolve())],
+                  cwd=out_dir, timeout_s=60, stall_timeout_s=30)
+    return sorted(out_dir.glob("f*.jpg"))
 
 
 def burn_subtitles(src: MediaInfo, ass: Path, out: Path, *, encoder: Encoder, crf: int,

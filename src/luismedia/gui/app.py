@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
         self.process.busy_changed.connect(self._on_busy)
         self.process.queue_changed.connect(self.style_page.set_background)
+        self.captions.doc_opened.connect(self.style_page.set_doc)
         self.process.review_requested.connect(self._open_review)
         self.captions.approved.connect(self._continue_after_review)
 

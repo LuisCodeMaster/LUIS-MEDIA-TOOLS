@@ -97,5 +97,38 @@ QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 4px; min-hei
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
 QScrollBar::handle:horizontal {{ background: {BORDER}; border-radius: 4px; min-width: 30px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
+/* ---- estilo das legendas: inspetor + monitor */
+QFrame#inspector {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px; }}
+QFrame#stage {{ background: #0a0b11; border: 1px solid {BORDER}; border-radius: 12px; }}
+QFrame#divider {{ background: {BORDER}; border: none; }}
+QLabel#caption {{ color: {MUTED}; font-size: 8pt; font-weight: 700; letter-spacing: 1px; }}
+QLabel#monitor {{ background: transparent; }}
+QLabel#timecode {{ color: {MUTED}; font-family: "Cascadia Code", "Consolas", monospace; font-size: 9pt; }}
+QPushButton#seg {{ background: transparent; border: none; border-radius: 6px; padding: 6px 9px; color: {MUTED};
+                  font-weight: 600; }}
+QPushButton#seg:hover {{ color: {TEXT}; }}
+QPushButton#seg:checked {{ background: {SURFACE_2}; color: {TEXT}; }}
+QPushButton#swatch {{ border: 1px solid #5b6178; border-radius: 6px; padding: 0; }}
+QPushButton#swatch:hover {{ border-color: {TEXT}; }}
+QPushButton#swatch:disabled {{ border-color: {SURFACE_2}; }}
+QPushButton#play {{ background: {TEXT}; color: #0a0b11; border: none; border-radius: 19px; font-size: 11pt;
+                   font-weight: 700; padding: 0; }}
+QPushButton#play:hover {{ background: #ffffff; }}
+QPushButton#play:disabled {{ background: {SURFACE_2}; color: {MUTED}; }}
+QToolButton#more {{ background: {SURFACE_2}; border: 1px solid {BORDER}; border-radius: 8px; padding: 4px 10px;
+                   font-size: 12pt; }}
+QToolButton#more:hover {{ border-color: {ACCENT}; }}
+QToolButton#more::menu-indicator {{ image: none; width: 0; }}
+QMenu {{ background: {SURFACE_2}; border: 1px solid {BORDER}; border-radius: 8px; padding: 4px; }}
+QMenu::item {{ padding: 7px 18px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {ACCENT_STRONG}; }}
+QMenu::item:disabled {{ color: #5d6478; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 6px; }}
+QSlider#timeline::groove:horizontal {{ height: 4px; background: {SURFACE_2}; border-radius: 2px; }}
+QSlider#timeline::sub-page:horizontal {{ background: {ACCENT}; border-radius: 2px; }}
+QSlider#timeline::handle:horizontal {{ background: {TEXT}; width: 12px; height: 12px; margin: -4px 0;
+                                      border-radius: 6px; }}
+QSlider#timeline::groove:horizontal:disabled {{ background: {SURFACE}; }}
+QSlider#timeline::handle:horizontal:disabled {{ background: {BORDER}; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
 """
