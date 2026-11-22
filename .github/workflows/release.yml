@@ -56,6 +56,12 @@ jobs:
           "FFMPEG_BIN=$bin" >> $env:GITHUB_ENV
           & "$bin\ffmpeg.exe" -hide_banner -version | Select-Object -First 1
 
+      - name: Transcricao real com o Whisper (modelo tiny)
+        run: |
+          $env:PATH = "$env:FFMPEG_BIN;$env:PATH"
+          & "$env:FFMPEG_BIN\ffmpeg.exe" -v error -y -f lavfi -i "sine=frequency=300:duration=4" -ac 1 -ar 16000 -c:a pcm_s16le teste.wav
+          python -c "from pathlib import Path; from luismedia.core.config import WhisperConfig; from luismedia.adapters.whisper import WhisperEngine; t = WhisperEngine(WhisperConfig(model='tiny', fallback_models=[], device='cpu')).transcribe(Path('teste.wav'), 4.0); print('transcricao OK:', t.model, t.device, len(t.segments), 'segmentos')"
+
       - name: Empacotar o app (PyInstaller)
         working-directory: packaging
         run: python -m PyInstaller --noconfirm --clean --distpath ..\dist app.spec
