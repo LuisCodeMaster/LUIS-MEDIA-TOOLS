@@ -165,7 +165,7 @@ def test_style_page_capcut_controls_templates_and_drag(window, tmp_path):
 
     # modelo proprio: salvar, aparece com estrela, exportar, excluir, importar
     ed.save_user_preset("Cliente X")
-    assert ed.preset.currentText() == "★ Cliente X" and ed.btn_delete.isEnabled()
+    assert ed.preset.currentText() == "★ Cliente X" and ed.act_delete.isEnabled()
     assert w.style_page.h.preset.findText("★ Cliente X") < 0  # modelos 9:16 e 16:9 separados
     f = tmp_path / "x.estilo.json"
     ed.export_style(f, "Cliente X")
@@ -191,3 +191,38 @@ def _pix(wd, ht):
     p = QPixmap(wd, ht)
     p.fill(QColor("#334"))
     return p
+
+
+def test_style_preview_player_with_real_captions(window, tmp_path, lesson_video):
+    from luismedia.core.captions import CaptionDoc
+    from luismedia.core.models import Segment, Word
+
+    if not _has_libass():
+        pytest.skip("ffmpeg sem libass")
+    app, w = window
+    sp = w.style_page
+    sp.tabs.setCurrentIndex(1)
+    ed = sp.v
+    seg = Segment(start=4.6, end=6.8, text="vamos ganhar dinheiro",
+                  words=[Word(start=4.6 + i * 0.6, end=5.0 + i * 0.6, text=t)
+                         for i, t in enumerate(["vamos", "ganhar", "dinheiro"])])
+    doc = CaptionDoc(video=str(lesson_video), width=320, height=240, captions=[seg], keywords=["dinheiro"])
+    sp.set_doc(doc)
+    assert pump(app, lambda: ed.source.segments and ed.timeline.isEnabled(), 30)
+    assert abs(ed.timeline.maximum() - 12000) < 600  # linha do tempo = duracao do video
+    assert ed._moment == pytest.approx(4.6)  # comeca na primeira fala
+    assert "Legendas reais" in ed.source_lbl.text()
+
+    ed.play()
+    assert ed.playing and ed.btn_play.text() == "❚❚"
+    assert pump(app, lambda: len(ed._frames) > 50 and ed._frame_i > 5, 60)
+    assert ed.timeline.value() > 4600  # a agulha anda junto com o video
+    ed.pause()
+    assert not ed.playing and ed.btn_play.text() == "▶"
+
+    ed.timeline.setValue(9000)  # clique em outro ponto da linha do tempo
+    assert ed._moment == pytest.approx(9.0)
+    assert ed.time_lbl.text().startswith("00:09")
+
+    sp.set_background(None)  # fila vazia: continua com o video revisado
+    assert ed.source.video == lesson_video

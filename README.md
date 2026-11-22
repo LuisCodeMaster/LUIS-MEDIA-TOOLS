@@ -71,7 +71,8 @@ A janela tem seis telas:
 - **Estilo das legendas:** modelos prontos e os seus (salvar, exportar, importar) e todos os
   ajustes (fonte, cores, gradiente, contorno, caixa, neon, posição livre arrastando na prévia,
   animação, destaque da palavra falada, palavras-chave e emojis) para a aula 16:9 e para os
-  cortes 9:16, com prévia desenhada pelo mesmo motor que gera o vídeo.
+  cortes 9:16. A prévia tem player (▶ com a animação real), linha do tempo para escolher o
+  momento do vídeo e usa as legendas reais depois da revisão.
 - **Slides com IA:** escreva o tema, a IA monta o roteiro, você ajusta o texto e gera uma
   apresentação 16:9 interativa (laser, desenho, notas, visão geral, exportar PDF).
 - **Diagnóstico:** confere FFmpeg, placa de vídeo, Whisper, Ollama e navegador, explica como

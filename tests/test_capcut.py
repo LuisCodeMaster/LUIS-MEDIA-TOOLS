@@ -186,3 +186,27 @@ def test_user_presets_roundtrip(tmp_path, monkeypatch):
     raw["v"]["quebrado"] = {"color": "nao-e-cor"}
     (tmp_path / "estilos.json").write_text(json.dumps(raw), encoding="utf-8")
     assert set(style_page.load_user_presets()["v"]) == {"Cliente X"}  # ignora so o invalido
+
+
+# ------------------------------------------------------------------ previa animada
+def test_preview_segments_window_and_sample():
+    from luismedia.stages.media import preview_segments
+
+    segs = [seg3("um dois tres", 1), seg3("quatro cinco", 10)]
+    got = preview_segments(SubtitleStyle(), 1080, 1920, 2.0, 4.0, segs)
+    assert len(got) == 1 and got[0].start == 0 and got[0].end == pytest.approx(1.0)
+    assert preview_segments(SubtitleStyle(), 1080, 1920, 0, 4, None)[0].text.startswith("Hoje")
+
+
+@needs_ffmpeg
+@needs_libass
+def test_render_style_clip_frames(tmp_path, lesson_video):
+    from luismedia.stages.media import PREVIEW_FPS, render_style_clip
+
+    s = PRESETS_V["Marca-texto"]
+    segs = [seg3("vamos ganhar dinheiro", 4.6)]
+    frames = render_style_clip(s, tmp_path / "c", width=180, height=320, background=lesson_video,
+                               start=5.0, duration=2.0, segments=segs, keywords=["dinheiro"])
+    assert abs(len(frames) - 2 * PREVIEW_FPS) <= 2
+    again = render_style_clip(s, tmp_path / "c", width=180, height=320, duration=1.0)  # sem video
+    assert abs(len(again) - PREVIEW_FPS) <= 2  # quadros antigos apagados

@@ -61,6 +61,7 @@ def tc(sec: float) -> str:
 
 class CaptionsPage(QWidget):
     approved = Signal(list)  # caminhos dos videos originais aprovados (para continuar o processamento)
+    doc_opened = Signal(object)  # CaptionDoc aberto/salvo (a tela de estilo usa as legendas reais na previa)
 
     def __init__(self) -> None:
         super().__init__()
@@ -276,6 +277,7 @@ class CaptionsPage(QWidget):
         self.keywords.blockSignals(True)
         self.keywords.setText(", ".join(self.doc.keywords))
         self.keywords.blockSignals(False)
+        self.doc_opened.emit(self.doc)
         self._fill_table()
         self._set_enabled(True)
         if self.player is not None and Path(self.doc.video).exists():
@@ -389,6 +391,7 @@ class CaptionsPage(QWidget):
             return False
         self.doc.keywords = self.keyword_list()
         self.doc.save(self.doc_path)
+        self.doc_opened.emit(self.doc)
         captions_edited(self.doc_path.parent.parent)
         self.dirty = False
         banner(self.msg, "ok", "Legendas salvas.")

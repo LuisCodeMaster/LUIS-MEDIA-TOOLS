@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0] - 2026-11-22
+
+### Novo: painel de estilo profissional com player
+- **Player na prévia:** botão ▶ reproduz 4 s da legenda animada (entrada, palavra falada,
+  emojis) em loop, desenhada pelo mesmo motor do vídeo final.
+- **Linha do tempo:** escolha qualquer momento do vídeo; a prévia mostra aquele quadro exato.
+- **Legendas reais na prévia:** ao abrir um vídeo em **Revisar legendas**, a prévia passa a usar
+  o texto, os tempos e as palavras-chave dele.
+- **Painel minimalista:** inspetor com seções (Texto, Cores, Caixa, Posição, Animação, Extras),
+  só os campos que fazem sentido aparecem; opções de modelo no menu ⋯; salvar no topo.
+
 ## [1.2.0] - 2026-11-22
 
 ### Novo: legendas estilo CapCut
