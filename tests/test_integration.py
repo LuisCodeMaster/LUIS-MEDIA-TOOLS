@@ -218,3 +218,29 @@ def test_missing_subtitles_filter_is_clear_warning(tmp_path, lesson_video, monke
     p.whisper = FakeWhisper()
     [r] = p.run([lesson_video], tmp_path / "out")
     assert r.ok and any("filtro 'subtitles'" in w for w in r.warnings)
+
+
+def test_whisper_receives_decoded_audio_not_a_path(tmp_path, lesson_video):
+    """Regressao: o faster-whisper decodifica com PyAV e quebra no PyAV 14+
+    ("metadata_errors"). O adapter precisa entregar o audio ja decodificado."""
+    import numpy as np
+
+    from luismedia.adapters import whisper as wh
+    from luismedia.core.config import WhisperConfig
+
+    info = ff.probe(lesson_video)
+    wav = media.extract_audio(info, tmp_path / "a.wav")
+    arr = wh.load_audio(wav)
+    assert arr.dtype == np.float32 and abs(len(arr) / 16000 - info.duration) < 0.2
+
+    seen = {}
+
+    class FakeModel:
+        def transcribe(self, audio, **kw):
+            seen["audio"] = audio
+            return iter([]), type("I", (), {"language": "pt"})()
+
+    eng = wh.WhisperEngine(WhisperConfig(device="cpu", fallback_models=[]))
+    eng._load = lambda *a: FakeModel()
+    eng.transcribe(wav, info.duration)
+    assert isinstance(seen["audio"], np.ndarray)

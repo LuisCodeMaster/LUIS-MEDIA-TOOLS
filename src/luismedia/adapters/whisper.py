@@ -40,6 +40,37 @@ def detect_device(pref: WhisperDevice) -> tuple[str, str]:
     return "cpu", "int8"
 
 
+def load_audio(path: Path):
+    """Le o WAV mono 16 kHz que o pipeline ja gera e entrega ao Whisper como numpy.
+
+    Evita o decodificador do faster-whisper (PyAV): no PyAV 14+ a opcao `metadata_errors`
+    que ele usa foi removida e a transcricao falhava com
+    "open() got an unexpected keyword argument 'metadata_errors'".
+    Qualquer outro formato e convertido antes pelo FFmpeg.
+    """
+    import subprocess
+    import wave
+
+    import numpy as np
+
+    from . import ffmpeg as ff
+
+    try:
+        with wave.open(str(path), "rb") as w:
+            if (w.getnchannels(), w.getsampwidth(), w.getframerate()) == (1, 2, 16000):
+                raw = w.readframes(w.getnframes())
+                return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    except (wave.Error, EOFError, OSError):
+        pass
+    res = subprocess.run([ff.find_binary("ffmpeg"), "-nostdin", "-v", "error", "-i", str(path),
+                          "-f", "s16le", "-ac", "1", "-ar", "16000", "-"],
+                         capture_output=True, timeout=3600, **ff.NO_WINDOW)
+    if res.returncode != 0:
+        raise TranscriptionFailed("nao consegui ler o audio para transcrever",
+                                  detail=res.stderr.decode("utf-8", "replace")[-1500:])
+    return np.frombuffer(res.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def vocabulary_kwargs(cfg: WhisperConfig) -> dict:
     """Termos da aula (nomes, siglas, formulas): vao como contexto inicial e como hotwords,
     o que faz o Whisper preferir essa grafia ("Vygotsky", "LGPD", "Bhaskara")."""
@@ -99,7 +130,7 @@ class WhisperEngine:
                 try:
                     model = self._load(model_name, device, compute)
                     seg_iter, info = model.transcribe(
-                        str(audio), language=self.cfg.language, beam_size=self.cfg.beam_size,
+                        load_audio(audio), language=self.cfg.language, beam_size=self.cfg.beam_size,
                         word_timestamps=True, vad_filter=self.cfg.vad_filter, **vocabulary_kwargs(self.cfg),
                     )
                     segments: list[Segment] = []

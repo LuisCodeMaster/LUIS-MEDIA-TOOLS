@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2] - 2026-11-22
+
+### Corrigido
+- A transcricao falhava com "open() got an unexpected keyword argument 'metadata_errors'":
+  o faster-whisper usa uma opcao que o PyAV 14+ removeu. O app agora le o audio sozinho e
+  entrega ao Whisper ja decodificado.
+- O build do instalador passou a rodar uma transcricao real com o Whisper no Windows.
+
 ## [1.1.1] - 2026-11-11
 
 ### Corrigido
