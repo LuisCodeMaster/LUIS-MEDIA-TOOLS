@@ -12,7 +12,7 @@ Nada sai do seu computador: a transcrição usa o Whisper e a IA usa o Ollama, a
 
 | Recurso | Resultado |
 | --- | --- |
-| **Autocut** | Remove as pausas curtas e mantém as pausas didáticas longas. Exporta uma timeline EDL para DaVinci Resolve ou Premiere |
+| **Limpeza da fala** | Encontra pausas e vícios (“é…”, “ãh”, “hum”) e sugere os cortes; você confere numa linha do tempo com onda do áudio, desfazer/refazer e atalhos. Mantém as pausas didáticas longas e exporta EDL para DaVinci Resolve ou Premiere |
 | **Legendas profissionais** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, até 17 caracteres por segundo, 2 quadros entre legendas, sem cortar frases em "de", "que" ou "para". Inclui versão Shorts |
 | **Revisão** | Editor com o vídeo para corrigir texto e tempo antes de gerar o vídeo legendado, com localizar e substituir e correções automáticas para as próximas aulas |
 | **Vocabulário da aula** | Nomes, siglas e termos passados ao Whisper para ele acertar a grafia |
@@ -100,7 +100,7 @@ Perfis prontos em `src/luismedia/profiles/` (na linha de comando, use só o nome
 
 - `curso-completo.yaml`: tudo ativado.
 - `redes-sociais.yaml`: vídeo enxuto, legenda queimada e 5 cortes 9:16. Sem apostila.
-- `pre-edicao-nle.yaml`: autocut, EDL e legendas, sem IA, para terminar no editor.
+- `pre-edicao-nle.yaml`: limpeza de pausas e vícios, EDL e legendas, sem IA, para terminar no editor.
 
 Qualquer opção pode ser ajustada. Uma chave escrita errado gera erro claro em vez de ser
 ignorada. Também dá para sobrescrever por variável de ambiente, por exemplo
@@ -116,7 +116,7 @@ saida/
 ├── relatorio.json             # o que funcionou, avisos e falhas por vídeo
 ├── job.log.jsonl              # log detalhado (para suporte)
 └── aula 01/
-    ├── aula 01_DINAMICO.mp4   # sem pausas
+    ├── aula 01_EDITADO.mp4    # sem pausas e vícios
     ├── aula 01_LEGENDADO.mp4  # com legenda queimada
     ├── aula 01.edl            # timeline para o editor
     ├── legendas/              # .srt .vtt .ass, _shorts.srt, transcript.json

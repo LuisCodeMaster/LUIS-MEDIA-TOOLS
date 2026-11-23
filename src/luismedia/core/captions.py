@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from .cleanup import Cut
 from .models import Segment, Word
 from .segmentation import normalize, wrap_two_lines
 
@@ -22,6 +23,8 @@ class CaptionDoc(BaseModel):
     height: int = 1080
     approved: bool = False
     keywords: list[str] = []  # palavras-chave em destaque (sugeridas pela IA, editaveis)
+    duration: float = 0.0     # duracao do video (para os cortes do fim)
+    cuts: list[Cut] = []      # pausas e vicios sugeridos/aprovados (ver core.cleanup)
     captions: list[Segment]
 
     @classmethod

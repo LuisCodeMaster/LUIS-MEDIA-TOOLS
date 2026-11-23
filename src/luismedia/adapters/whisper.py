@@ -71,14 +71,26 @@ def load_audio(path: Path):
     return np.frombuffer(res.stdout, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def vocabulary_kwargs(cfg: WhisperConfig) -> dict:
+def vocabulary_kwargs(cfg: WhisperConfig, fillers: bool = False) -> dict:
     """Termos da aula (nomes, siglas, formulas): vao como contexto inicial e como hotwords,
-    o que faz o Whisper preferir essa grafia ("Vygotsky", "LGPD", "Bhaskara")."""
+    o que faz o Whisper preferir essa grafia ("Vygotsky", "LGPD", "Bhaskara").
+
+    Com ``fillers``, o contexto inicial tambem traz hesitacoes ("é...", "ãh", "hum"): sem isso o
+    Whisper costuma omiti-las e a limpeza de vicios nao teria o que cortar."""
+    from ..core.cleanup import FILLER_PROMPT
+
     terms = [t.strip() for t in cfg.vocabulary if t.strip()]
-    if not terms:
-        return {}
-    joined = ", ".join(dict.fromkeys(terms))[:600]
-    return {"initial_prompt": f"Aula com os termos: {joined}.", "hotwords": joined}
+    out: dict = {}
+    prompt = []
+    if fillers:
+        prompt.append(FILLER_PROMPT)
+    if terms:
+        joined = ", ".join(dict.fromkeys(terms))[:600]
+        prompt.append(f"Aula com os termos: {joined}.")
+        out["hotwords"] = joined
+    if prompt:
+        out["initial_prompt"] = " ".join(prompt)
+    return out
 
 
 def _is_oom(exc: BaseException) -> bool:
@@ -92,8 +104,9 @@ class WhisperEngine:
 
     _lock = Lock()
 
-    def __init__(self, cfg: WhisperConfig) -> None:
+    def __init__(self, cfg: WhisperConfig, *, fillers: bool = False) -> None:
         self.cfg = cfg
+        self.fillers = fillers  # pede para o Whisper escrever "é...", "ãh", "hum"
         self._model = None
         self._loaded: tuple[str, str, str] | None = None
         self.cancel = None  # threading.Event opcional, checado a cada segmento
@@ -131,7 +144,7 @@ class WhisperEngine:
                     model = self._load(model_name, device, compute)
                     seg_iter, info = model.transcribe(
                         load_audio(audio), language=self.cfg.language, beam_size=self.cfg.beam_size,
-                        word_timestamps=True, vad_filter=self.cfg.vad_filter, **vocabulary_kwargs(self.cfg),
+                        word_timestamps=True, vad_filter=self.cfg.vad_filter, **vocabulary_kwargs(self.cfg, self.fillers),
                     )
                     segments: list[Segment] = []
                     for s in seg_iter:  # gerador: o trabalho acontece aqui

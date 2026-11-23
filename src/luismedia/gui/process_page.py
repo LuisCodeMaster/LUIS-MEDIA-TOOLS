@@ -38,10 +38,12 @@ from . import state, theme
 from .tasks import PipelineJob, run_task, start_job
 from .widgets import Card, banner, hint, page_header, row, toggle
 
-STAGE_ORDER = ["validacao", "autocut", "audio", "transcricao", "masterizacao", "hardsub", "ia",
-               "resumo", "quiz", "cortes", "slides", "apostila"]
+STAGE_ORDER = ["validacao", "autocut", "audio", "transcricao", "limpeza", "masterizacao", "ia", "resumo", "quiz",
+               "palavras-chave", "edicao", "legendas", "hardsub", "cortes", "slides", "apostila"]
 STAGE_NAMES = {
     "validacao": "Validando", "autocut": "Cortando pausas", "audio": "Extraindo áudio",
+    "limpeza": "Achando pausas e vícios", "edicao": "Aplicando os cortes", "legendas": "Gerando legendas",
+    "palavras-chave": "Escolhendo palavras-chave", "revisao": "Aguardando revisão",
     "transcricao": "Transcrevendo", "masterizacao": "Masterizando voz", "hardsub": "Queimando legenda",
     "ia": "IA local", "resumo": "Gerando resumo", "quiz": "Gerando quiz", "cortes": "Gerando cortes 9:16",
     "slides": "Detectando slides", "apostila": "Montando apostila",
@@ -88,12 +90,14 @@ class ProcessPage(QWidget):
     busy_changed = Signal(bool)
     queue_changed = Signal(object)        # primeiro video da fila (para a previa de estilo)
     review_requested = Signal(str, str)   # pasta do lote, nome do video
+    job_started = Signal(object)          # PipelineJob (a tela Inicio acompanha o progresso)
 
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("page")
         self.job: PipelineJob | None = None
         self.paths: list[Path] = []
+        self._overrides: dict[Path, dict] = {}  # escolhas da tela Inicio por video
         self._loading = False
         self._build()
         self._restore()
@@ -217,9 +221,10 @@ class ProcessPage(QWidget):
         ol.addWidget(mode)
 
         cut = Card("Corte e voz")
-        self.o_autocut = toggle("Remover pausas (autocut)", "Corta silêncios e hesitações do vídeo")
+        self.o_autocut = toggle("Cortar pausas", "Encurta os silêncios entre as falas (revisável na linha do tempo)")
+        self.o_fillers = toggle("Cortar vícios (é…, ãh, hum)", "Também sugere “né” e “tipo”, desmarcados")
         self.o_pause = QDoubleSpinBox()
-        self.o_pause.setRange(1.0, 10.0)
+        self.o_pause.setRange(1.0, 60.0)
         self.o_pause.setSingleStep(0.5)
         self.o_pause.setSuffix(" s")
         self.o_pause.setDecimals(1)
@@ -227,6 +232,7 @@ class ProcessPage(QWidget):
         self.o_edl = toggle("Exportar timeline EDL", "Para abrir os cortes no DaVinci Resolve ou Premiere")
         self.o_master = toggle("Masterizar voz (-14 LUFS)", "Equalização e volume no padrão do YouTube")
         cut.body.addWidget(self.o_autocut)
+        cut.body.addWidget(self.o_fillers)
         cut.body.addWidget(row(QLabel("Manter pausas maiores que"), self.o_pause))
         cut.body.addWidget(self.o_edl)
         cut.body.addWidget(self.o_master)
@@ -305,13 +311,14 @@ class ProcessPage(QWidget):
             sig = getattr(w, "toggled", None) or getattr(w, "valueChanged", None) or w.currentIndexChanged
             sig.connect(self._on_option_changed)
         self.o_autocut.toggled.connect(self._sync_enabled)
+        self.o_fillers.toggled.connect(self._sync_enabled)
         self.o_slides.toggled.connect(self._sync_enabled)
         self.o_handout.toggled.connect(self._sync_enabled)
         self.o_clips.toggled.connect(self._sync_enabled)
         self._refresh_queue()
 
     def _option_widgets(self) -> list[QWidget]:
-        return [self.o_autocut, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
+        return [self.o_autocut, self.o_fillers, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
                 self.o_encoder, self.o_slides, self.o_handout, self.o_pdf, self.o_summary, self.o_quiz,
                 self.o_clips, self.o_clips_n]
 
@@ -320,8 +327,10 @@ class ProcessPage(QWidget):
         """Escolhas da tela no formato do Settings."""
         clips = self.o_clips.isChecked()
         return {
-            "autocut": {"enabled": self.o_autocut.isChecked(), "export_edl": self.o_edl.isChecked(),
-                        "keep_pauses_longer_than_s": self.o_pause.value()},
+            "autocut": {"enabled": False},
+            "cleanup": {"enabled": self.o_autocut.isChecked() or self.o_fillers.isChecked(),
+                        "pauses": self.o_autocut.isChecked(), "fillers": self.o_fillers.isChecked(),
+                        "export_edl": self.o_edl.isChecked(), "max_pause_s": self.o_pause.value()},
             "audio": {"master": self.o_master.isChecked()},
             "render": {"hardsub": self.o_hardsub.isChecked(), "encoder": ENCODERS[self.o_encoder.currentIndex()][1]},
             "subtitles": {"shorts_version": self.o_shorts.isChecked(), "review": self.o_review.isChecked()},
@@ -336,9 +345,10 @@ class ProcessPage(QWidget):
     def _set_options(self, s) -> None:
         self._loading = True
         try:
-            self.o_autocut.setChecked(s.autocut.enabled)
-            self.o_pause.setValue(s.autocut.keep_pauses_longer_than_s)
-            self.o_edl.setChecked(s.autocut.export_edl)
+            self.o_autocut.setChecked(s.cleanup.enabled and s.cleanup.pauses)
+            self.o_fillers.setChecked(s.cleanup.enabled and s.cleanup.fillers)
+            self.o_pause.setValue(s.cleanup.max_pause_s)
+            self.o_edl.setChecked(s.cleanup.export_edl)
             self.o_master.setChecked(s.audio.master)
             self.o_hardsub.setChecked(s.render.hardsub)
             self.o_shorts.setChecked(s.subtitles.shorts_version)
@@ -375,7 +385,7 @@ class ProcessPage(QWidget):
 
     def _sync_enabled(self, *_) -> None:
         self.o_pause.setEnabled(self.o_autocut.isChecked())
-        self.o_edl.setEnabled(self.o_autocut.isChecked())
+        self.o_edl.setEnabled(self.o_autocut.isChecked() or self.o_fillers.isChecked())
         self.o_pdf.setEnabled(self.o_handout.isChecked())
         self.o_clips_n.setEnabled(self.o_clips.isChecked())
 
@@ -465,16 +475,22 @@ class ProcessPage(QWidget):
             b.setEnabled(not busy)
 
     # ------------------------------------------------------------------ execucao
-    def start(self, only: list[Path] | None = None) -> None:
+    def start(self, only: list[Path] | None = None, overrides: dict | None = None) -> None:
+        """Processa a fila (ou so ``only``). ``overrides`` (tela Inicio) vale por cima das opcoes."""
         if not self.paths or self.job:
             return
         videos = [p for p in self.paths if only is None or p in only]
+        if overrides is None:  # continuacao depois da revisao: repete as escolhas da tela Inicio
+            overrides = next((self._overrides[v] for v in videos if v in self._overrides), None)
+        for v in videos:
+            if overrides is not None:
+                self._overrides[v] = overrides
         out = self.out_edit.text().strip()
         if not out:
             QMessageBox.warning(self, "Pasta de saída", "Escolha onde salvar os resultados.")
             return
         try:
-            settings = state.compose(state.load_base_settings(), self.options())
+            settings = state.compose(state.compose(state.load_base_settings(), self.options()), overrides or {})
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Configuração inválida", str(exc))
             return
@@ -497,6 +513,7 @@ class ProcessPage(QWidget):
         self.btn_cancel.setText("Cancelar")
         self._refresh_queue()
         self.busy_changed.emit(True)
+        self.job_started.emit(self.job)
         start_job(self.job)
 
     def cancel(self) -> None:

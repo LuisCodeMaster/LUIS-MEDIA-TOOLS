@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from .. import __version__
 from . import state, theme
 from .captions_page import CaptionsPage
+from .home_page import HomePage
 from .other_pages import DiagnosticsPage, SettingsPage, SlidesPage, ollama_version
 from .process_page import ProcessPage
 from .style_page import StylePage
@@ -78,7 +79,7 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         self.nav.setCursor(Qt.CursorShape.PointingHandCursor)
-        for label in ("Processar aulas", "Revisar legendas", "Estilo das legendas", "Slides com IA",
+        for label in ("Início", "Processar em lote", "Revisar e editar", "Estilo das legendas", "Slides com IA",
                       "Diagnóstico", "Configurações"):
             item = QListWidgetItem(label)
             item.setSizeHint(QSize(200, 42))
@@ -98,12 +99,13 @@ class MainWindow(QMainWindow):
         # ---- paginas
         self.stack = QStackedWidget()
         self.process = ProcessPage()
+        self.home = HomePage(self.process)
         self.captions = CaptionsPage()
         self.style_page = StylePage()
         self.slides = SlidesPage()
         self.diag = DiagnosticsPage()
         self.settings = SettingsPage()
-        for p in (self.process, self.captions, self.style_page, self.slides, self.diag, self.settings):
+        for p in (self.home, self.process, self.captions, self.style_page, self.slides, self.diag, self.settings):
             self.stack.addWidget(p)
         root.addWidget(self.stack, 1)
 
@@ -113,6 +115,8 @@ class MainWindow(QMainWindow):
         self.process.queue_changed.connect(self.style_page.set_background)
         self.captions.doc_opened.connect(self.style_page.set_doc)
         self.process.review_requested.connect(self._open_review)
+        self.home.review_requested.connect(self._open_review)
+        self.home.advanced_requested.connect(lambda: self.nav.setCurrentRow(1))
         self.captions.approved.connect(self._continue_after_review)
 
         self._ai_timer = QTimer(self)
@@ -134,12 +138,13 @@ class MainWindow(QMainWindow):
             self.ai_status.setToolTip("Abra o Ollama para usar resumo, quiz, cortes e slides com IA.")
 
     def _open_review(self, out_root: str, name: str) -> None:
-        self.nav.setCurrentRow(1)
+        self.nav.setCurrentRow(2)
         self.captions.load_root(Path(out_root), select=name)
 
     def _continue_after_review(self, sources: list) -> None:
-        self.nav.setCurrentRow(0)
-        self.process.continue_after_review([Path(s) for s in sources])
+        paths = [Path(s) for s in sources]
+        self.nav.setCurrentRow(0 if self.home.video in paths else 1)
+        self.process.continue_after_review(paths)
 
     def _on_busy(self, busy: bool) -> None:
         title = APP_NAME + (" — processando…" if busy else "")

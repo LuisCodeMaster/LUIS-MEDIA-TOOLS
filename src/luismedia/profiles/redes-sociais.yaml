@@ -1,6 +1,7 @@
 # Foco em redes: video enxuto, legenda queimada e cortes 9:16. Sem apostila.
 profile_name: redes-sociais
-autocut: {enabled: true, export_edl: false, keep_pauses_longer_than_s: 1.5}
+autocut: {enabled: false}
+cleanup: {enabled: true, fillers: true, min_pause_s: 0.6, keep_pause_s: 0.2, max_pause_s: 4, export_edl: false}
 audio: {master: true, target_lufs: -14}
 render: {encoder: auto, hardsub: true}
 slides: {enabled: false, handout: false, handout_pdf: false}

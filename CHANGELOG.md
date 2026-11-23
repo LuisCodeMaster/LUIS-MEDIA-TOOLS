@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0] - 2026-11-22
+
+### Novo: editar sem precisar de outro programa
+- **Tela Início de um passo:** arraste o vídeo, escolha o estilo da legenda e clique em **Gerar**.
+  Opções avançadas ficam em "Processar em lote".
+- **Corte de pausas e vícios:** depois da transcrição o app encontra pausas longas e hesitações
+  ("é…", "ãh", "hum") pelas palavras do Whisper, confere no áudio se a pausa é silêncio mesmo e
+  sugere os cortes. "Né" e "tipo" vêm desmarcados. Pausas longas (demonstração) são mantidas.
+  O vídeo final sai sem os trechos (`<nome>_EDITADO.mp4` + EDL) e as legendas, cortes 9:16 e
+  apostila acompanham os novos tempos.
+- **Linha do tempo na revisão:** onda do áudio, cortes clicáveis, blocos de legenda para arrastar
+  e puxar as bordas, seleção de trecho para cortar à mão, prévia que pula os cortes.
+- **Desfazer e refazer** (Ctrl+Z / Ctrl+Y) e atalhos: Espaço/K tocar, J/L ±3 s, ←/→ legenda,
+  Delete corta a seleção.
+
+### Mudou
+- O corte de silêncio antigo (antes da transcrição) foi substituído pela limpeza revisável.
+
 ## [1.3.0] - 2026-11-22
 
 ### Novo: painel de estilo profissional com player

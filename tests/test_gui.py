@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -43,7 +44,8 @@ def test_presets_fill_options_and_edit_switches_to_custom(window):
     p = w.process
     p.preset.setCurrentText("Pré-edição (DaVinci / Premiere)")
     opts = p.options()
-    assert opts["autocut"]["export_edl"] and not opts["llm"]["enabled"] and not opts["render"]["hardsub"]
+    assert opts["cleanup"]["export_edl"] and not opts["llm"]["enabled"] and not opts["render"]["hardsub"]
+    assert opts["cleanup"]["fillers"] and not opts["autocut"]["enabled"]
     p.o_quiz.setChecked(True)
     assert p.preset.currentText() == "Personalizado" and p.options()["llm"]["quiz"]
 
@@ -79,9 +81,10 @@ def test_slides_page_builds_presentation(window, tmp_path):
 def test_process_page_runs_job_to_the_end(window, tmp_path, lesson_video, monkeypatch):
     import luismedia.pipeline.runner as runner
 
-    from .test_integration import FakeWhisper
+    from .test_integration import WordyWhisper
 
-    monkeypatch.setattr(runner, "WhisperEngine", lambda cfg: FakeWhisper())
+    pytest.importorskip("numpy")
+    monkeypatch.setattr(runner, "WhisperEngine", lambda cfg, **_k: WordyWhisper())
     app, w = window
     p = w.process
     p.preset.setCurrentText("Pré-edição (DaVinci / Premiere)")
@@ -92,7 +95,8 @@ def test_process_page_runs_job_to_the_end(window, tmp_path, lesson_video, monkey
     assert p.job is not None, "o botao Iniciar nao iniciou o processamento"
     assert pump(app, lambda: p.job is None, 180)
     assert p.table.item(0, 3).text() == "Concluído", p.result.text()
-    assert (tmp_path / "saida" / "aula 01" / "aula 01.edl").exists()
+    assert (tmp_path / "saida" / "aula 01" / "aula 01_edicao.edl").exists()
+    assert (tmp_path / "saida" / "aula 01" / "aula 01_EDITADO.mp4").exists()
     assert lesson_video.exists()
 
 
@@ -120,8 +124,9 @@ def test_review_flow_in_the_app(window, tmp_path, lesson_video, monkeypatch):
     from .test_subtitles_pro import CountingWhisper
 
     whisper = CountingWhisper()
-    monkeypatch.setattr(runner, "WhisperEngine", lambda cfg: whisper)
+    monkeypatch.setattr(runner, "WhisperEngine", lambda cfg, **_k: whisper)
     app, w = window
+    w.nav.setCurrentRow(1)  # Processar em lote
     p = w.process
     p.preset.setCurrentText("Pré-edição (DaVinci / Premiere)")
     p.o_hardsub.setChecked(True)
@@ -226,3 +231,85 @@ def test_style_preview_player_with_real_captions(window, tmp_path, lesson_video)
 
     sp.set_background(None)  # fila vazia: continua com o video revisado
     assert ed.source.video == lesson_video
+
+
+@needs_ffmpeg
+@needs_libass
+def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video, monkeypatch):
+    """Inicio: solta o video, Gerar, revisa na linha do tempo (cortes, desfazer), aprova, pronto."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    import luismedia.pipeline.runner as runner
+
+    from .test_integration import WordyWhisper
+
+    pytest.importorskip("numpy")
+    monkeypatch.setattr(runner, "WhisperEngine", lambda cfg, **_k: WordyWhisper())
+    app, w = window
+    w.process.preset.setCurrentText("Pré-edição (DaVinci / Premiere)")  # sem IA, rapido
+    w.process.out_edit.setText(str(tmp_path / "out"))
+    home = w.home
+    assert w.stack.currentWidget() is home and home.steps.currentIndex() == 0
+    home._dropped([tmp_path / "nao-e-video.txt", lesson_video])
+    assert home.video == lesson_video and home.steps.currentIndex() == 1
+    assert pump(app, lambda: "0m 12s" in home.v_meta.text(), 20)
+    home.style_box.setCurrentText("Caixa (legível)") if home.style_box.findText("Caixa (legível)") >= 0 else None
+    home.o_clean.setChecked(True)
+    home.o_review.setChecked(True)
+    ov = home.overrides()
+    assert ov["cleanup"]["enabled"] and ov["subtitles"]["review"]
+    home.btn_go.click()
+    assert home.steps.currentIndex() == 2
+    assert pump(app, lambda: home.btn_review.isVisibleTo(w), 120), home.r_msg.text()
+    assert "pausas/vícios" in home.r_stage.text()
+
+    home.btn_review.click()
+    ed = w.captions
+    assert w.stack.currentWidget() is ed and pump(app, lambda: ed.doc is not None, 10)
+    assert ed.cuts_list.count() == 4 and "−" in ed.cut_summary.text()
+    assert pump(app, lambda: len(ed.timeline.env) > 100, 20)  # onda do audio carregada
+
+    # liga o "né?" pela linha do tempo, desfaz e refaz
+    k = next(i for i, c in enumerate(ed.doc.cuts) if not c.enabled)
+    ed.timeline.cut_toggled.emit(k)
+    assert ed.doc.cuts[k].enabled and ed.cuts_list.item(k).checkState() == Qt.CheckState.Checked
+    ed.undo()
+    assert not ed.doc.cuts[k].enabled and ed.btn_redo.isEnabled()
+    ed.redo()
+    assert ed.doc.cuts[k].enabled
+    ed.undo()
+
+    # corte manual pela selecao na onda (tecla Delete)
+    ed.timeline.selection = (11.75, 11.95)
+    ed.timeline.setFocus()
+    app.sendEvent(ed, QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier))
+    assert any(c.kind == "manual" for c in ed.doc.cuts)
+    ed.cuts_list.setCurrentRow(next(i for i, c in enumerate(ed.doc.cuts) if c.kind == "manual"))
+    assert ed.btn_cut_remove.isEnabled()
+    ed.btn_cut_remove.click()
+    assert not any(c.kind == "manual" for c in ed.doc.cuts)
+
+    # arrastar a borda de uma legenda na linha do tempo (com desfazer)
+    i, before = 0, ed.doc.captions[0].end
+    ed.timeline.caption_edit_started.emit(i)
+    ed.timeline.caption_edited.emit(i, ed.doc.captions[i].start, before - 0.3, True)
+    assert ed.doc.captions[i].end == pytest.approx(before - 0.3)
+    ed.undo()
+    assert ed.doc.captions[i].end == pytest.approx(before)
+
+    # atalhos J/L movem a agulha
+    ed.seek(5.0)
+    app.sendEvent(ed, QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_L, Qt.KeyboardModifier.NoModifier))
+    assert ed.timeline.playhead == pytest.approx(8.0)
+
+    ed.btn_approve.click()  # volta para o Inicio e gera o video final
+    assert w.stack.currentWidget() is home
+    assert pump(app, lambda: home.btn_open.isVisibleTo(w), 120), home.r_msg.text()
+    assert "Pronto" in home.r_title.text()
+    final = home._final_video()
+    from luismedia.adapters import ffmpeg as ff
+
+    assert final and final.endswith("_LEGENDADO.mp4") and 5.4 < ff.probe(Path(final)).duration < 6.6
+    home.btn_new.click()
+    assert home.steps.currentIndex() == 0

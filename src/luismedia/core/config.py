@@ -47,12 +47,33 @@ class _Strict(BaseModel):
 
 
 class AutoCutConfig(_Strict):
-    enabled: bool = True
+    """Corte de silencio rapido ANTES da transcricao (modo antigo; o app usa o CleanupConfig)."""
+
+    enabled: bool = False
     noise_db: float = Field(-32.0, le=0, ge=-80)
     min_silence_s: float = Field(1.1, gt=0)
     keep_pauses_longer_than_s: float = Field(2.5, gt=0)
     margin_s: float = Field(0.25, ge=0, le=1)
     export_edl: bool = True
+
+
+class CleanupConfig(_Strict):
+    """Limpeza da fala DEPOIS da transcricao: pausas e vicios, revisaveis na linha do tempo."""
+
+    enabled: bool = True
+    pauses: bool = True
+    min_pause_s: float = Field(0.8, ge=0.3, le=5)
+    keep_pause_s: float = Field(0.3, ge=0, le=1.5)
+    max_pause_s: float = Field(6.0, ge=1, le=60)  # maiores sao mantidas (demonstracao)
+    fillers: bool = True                          # "é...", "ãh", "hum" (e sugere "né", "tipo")
+    trim_ends: bool = True
+    export_edl: bool = True                       # timeline para DaVinci/Premiere
+
+    def detection(self):
+        from .cleanup import CleanupSettings
+
+        return CleanupSettings(pauses=self.pauses, min_pause_s=self.min_pause_s, keep_pause_s=self.keep_pause_s,
+                               max_pause_s=self.max_pause_s, fillers=self.fillers, trim_ends=self.trim_ends)
 
 
 class AudioConfig(_Strict):
@@ -126,6 +147,7 @@ class Settings(_Strict):
     keep_intermediates: bool = False
     move_source_files: bool = False  # o script antigo MOVIA os originais; agora e opt-in
     autocut: AutoCutConfig = AutoCutConfig()
+    cleanup: CleanupConfig = CleanupConfig()
     audio: AudioConfig = AudioConfig()
     whisper: WhisperConfig = WhisperConfig()
     llm: LLMConfig = LLMConfig()

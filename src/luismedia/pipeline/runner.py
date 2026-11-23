@@ -10,7 +10,7 @@
 Estrutura de saida por video::
 
     <saida>/<nome>/
-        <nome>_DINAMICO.mp4  <nome>_LEGENDADO.mp4  <nome>.edl
+        <nome>_EDITADO.mp4 (sem pausas/vicios)  <nome>_LEGENDADO.mp4  <nome>_edicao.edl
         legendas/   srt, vtt, ass, versao shorts, transcript.json
         audio/      audio bruto e masterizado
         slides/     frames + slides.json (com timestamp real)
@@ -37,7 +37,7 @@ from ..adapters import ffmpeg as ff
 from ..adapters import pdf
 from ..adapters.ollama import OllamaClient
 from ..adapters.whisper import WhisperEngine
-from ..core import subtitles
+from ..core import cleanup, subtitles
 from ..core.captions import CaptionDoc, apply_to_doc, realign_words
 from ..core.config import Settings
 from ..core.errors import Cancelled, LuisMediaError
@@ -83,13 +83,14 @@ class VideoResult:
 # Quais etapas precisam ser refeitas quando outra roda de novo
 DEPENDS: dict[str, list[str]] = {
     "autocut": [], "audio": ["autocut"], "transcricao": ["audio"], "masterizacao": ["audio"],
-    "palavras-chave": ["transcricao"],
-    "legendas": ["transcricao", "palavras-chave"], "hardsub": ["legendas"], "resumo": ["transcricao"],
-    "quiz": ["transcricao"], "cortes": ["legendas"], "slides": ["autocut"],
+    "palavras-chave": ["transcricao"], "limpeza": ["transcricao"], "edicao": ["limpeza"],
+    "legendas": ["transcricao", "palavras-chave", "edicao"], "hardsub": ["legendas"], "resumo": ["transcricao"],
+    "quiz": ["transcricao"], "cortes": ["legendas"], "slides": ["autocut", "edicao"],
     "apostila": ["slides", "legendas", "resumo"],
 }
 # Etapas que dependem do texto das legendas (refeitas quando o usuario edita no app)
-CAPTION_STAGES = ["legendas"]
+# (os cortes de pausas/vicios ficam no mesmo arquivo, entao a edicao do video tambem e refeita)
+CAPTION_STAGES = ["edicao", "legendas"]
 
 
 def stage_config(settings: Settings, stage: str) -> str:
@@ -100,7 +101,10 @@ def stage_config(settings: Settings, stage: str) -> str:
         "autocut": [s.autocut, s.render.crf],
         "audio": [],
         "transcricao": [s.whisper, s.subtitles.model_dump(exclude={"style_h", "style_v", "review",
-                                                                   "shorts_version"})],
+                                                                   "shorts_version"}),
+                        s.cleanup.enabled and s.cleanup.fillers],
+        "limpeza": [s.cleanup.detection()],
+        "edicao": [s.render.crf, s.cleanup.enabled, s.cleanup.export_edl],
         "masterizacao": [s.audio],
         "palavras-chave": [s.llm.model],
         "legendas": [s.subtitles.style_h, s.subtitles.shorts_version, s.subtitles.max_chars_shorts,
@@ -170,7 +174,8 @@ class Pipeline:
         self.s = settings
         self.listeners = listeners or []
         self.cancel = cancel or threading.Event()
-        self.whisper = WhisperEngine(settings.whisper)
+        self.whisper = WhisperEngine(settings.whisper,
+                                     fillers=settings.cleanup.enabled and settings.cleanup.fillers)
         self.whisper.cancel = self.cancel
         self.encoder = ff.pick_encoder(settings.render.encoder)
         self.llm = OllamaClient(settings.llm)
@@ -364,7 +369,7 @@ class Pipeline:
                 (leg / f"{name}.transcript.json").write_text(tr.model_dump_json(indent=2), encoding="utf-8")
                 caps = segment_transcript(tr.segments, self.rules)
                 doc = CaptionDoc(video=str(target.path), width=target.width or 1920,
-                                 height=target.height or 1080, captions=caps)
+                                 height=target.height or 1080, duration=target.duration, captions=caps)
                 apply_to_doc(doc, self.s.subtitles.replacements)
                 return {"transcript": str(leg / f"{name}.transcript.json"),
                         "captions": str(doc.save(leg / f"{name}.captions.json"))}
@@ -372,6 +377,28 @@ class Pipeline:
             if not step("transcricao", _transcribe, required=True):
                 return result
             captions_path = Path(result.outputs["captions"])
+
+            # 3b. Pausas e vicios (sugestoes revisaveis; o corte so acontece no passo 7)
+            if self.s.cleanup.enabled:
+                def _clean() -> dict[str, str]:
+                    env: list[float] | None = None
+                    envp = dirs["audio"] / f"{name}.envelope.json"
+                    try:
+                        env = cleanup.read_envelope_wav(Path(result.outputs["audio_bruto"]))
+                        envp.write_text(json.dumps({"rate": 50, "rms": env}), encoding="utf-8")
+                    except (ImportError, OSError, EOFError) as exc:
+                        log.warning("sem envelope de audio", extra={"error": str(exc)})
+                    d = CaptionDoc.load(captions_path)
+                    found = cleanup.detect_cuts(d.captions, target.duration, self.s.cleanup.detection(), env)
+                    d.cuts = cleanup.merge_detected(d.cuts, found)
+                    d.duration = target.duration
+                    d.save(captions_path)
+                    on = [c for c in found if c.enabled]
+                    p = dirs["legendas"] / f"{name}.cortes.json"
+                    p.write_text(json.dumps({"sugeridos": len(found), "marcados": len(on),
+                                             "segundos": round(cleanup.removed_seconds(on), 1)}), encoding="utf-8")
+                    return {"limpeza": str(p), **({"envelope": str(envp)} if env else {})}
+                step("limpeza", _clean, required=False)
 
             # 4. Audio master (nao depende do texto) -------------------------
             if self.s.audio.master:
@@ -410,9 +437,31 @@ class Pipeline:
                            message="aguardando revisao das legendas")
                 return result
 
-            # 7. Arquivos de legenda (do texto revisado) --------------------
+            # 7. Edicao: aplica os cortes aprovados (pausas, vicios, cortes manuais) --------
+            def _edit() -> dict[str, str]:
+                cuts = self._active_cuts(CaptionDoc.load(captions_path))
+                if not cuts:
+                    return {}
+                spans = cleanup.kept_spans(cuts, target.duration)
+                dst = out / f"{name}_EDITADO.mp4"
+                media.render_autocut(target, spans, dst, encoder=self.encoder, crf=self.s.render.crf, work=work)
+                res = {"video_editado": str(dst)}
+                if self.s.cleanup.export_edl:
+                    res["edl_edicao"] = str(media.export_edl(spans, out / f"{name}_edicao.edl",
+                                                             target.path.name, target.fps or 30))
+                return res
+
+            if not step("edicao", _edit, required=True):
+                return result
+            if "video_editado" in result.outputs:
+                target = ff.probe(Path(result.outputs["video_editado"]))
+                result.duration = target.duration
+                result.outputs["video_base"] = str(target.path)
+            time_map = cleanup.TimeMap(self._active_cuts(CaptionDoc.load(captions_path)))
+
+            # 8. Arquivos de legenda (do texto revisado, no tempo do video editado) ----
             def _subs() -> dict[str, str]:
-                d = CaptionDoc.load(captions_path)
+                d = self._edited_doc(captions_path)
                 leg = dirs["legendas"]
                 res = {
                     "srt": str(subtitles.write_srt(d.captions, leg / f"{name}.srt")),
@@ -430,18 +479,20 @@ class Pipeline:
 
             if self.s.render.hardsub:
                 def _hardsub() -> dict[str, str]:
-                    d = CaptionDoc.load(captions_path)
+                    d = self._edited_doc(captions_path)
                     emojis = emoji_plan(d.captions, self.s.subtitles.style_h, d.width, d.height, self._keywords(d))
                     return {"video_legendado": str(media.burn_subtitles(
                         target, Path(result.outputs["ass"]), out / f"{name}_LEGENDADO.mp4",
                         encoder=self.encoder, crf=self.s.render.crf, work=work, emojis=emojis))}
                 step("hardsub", _hardsub, required=False)
 
-            # 8. Cortes 9:16 (do texto revisado, com o estilo vertical) ------
+            # 9. Cortes 9:16 (do texto revisado, com o estilo vertical) ------
             if llm_ok and self.s.llm.clips:
                 def _clips() -> dict[str, str]:
-                    d = CaptionDoc.load(captions_path)
+                    d = self._edited_doc(captions_path)
                     plan = ai.pick_clips(self.llm, transcript, self.s.llm.clips_count, self.s.llm.max_context_chars)
+                    # a IA escolhe no tempo original; o corte sai do video ja editado
+                    plan = [c.model_copy(update={"start": time_map(c.start), "end": time_map(c.end)}) for c in plan]
                     res = {}
                     for i, clip in enumerate(plan, 1):
                         slug = "".join(ch if ch.isalnum() else "_" for ch in clip.title)[:50].strip("_")
@@ -453,7 +504,7 @@ class Pipeline:
                     return res
                 step("cortes", _clips, required=False)
 
-            # 9. Slides + apostila --------------------------------------------
+            # 10. Slides + apostila -------------------------------------------
             if self.s.slides.enabled:
                 def _slides() -> dict[str, str]:
                     frames = media.extract_slides(target, dirs["slides"], self.s.slides.scene_threshold)
@@ -472,7 +523,7 @@ class Pipeline:
                             Path(result.outputs["slides_index"]).read_text(encoding="utf-8"))]
                     sp = result.outputs.get("resumo")
                     summary_md = Path(sp).read_text(encoding="utf-8") if sp and Path(sp).exists() else None
-                    d = CaptionDoc.load(captions_path)
+                    d = self._edited_doc(captions_path)
                     tr = Transcript(language=transcript.language, duration=transcript.duration,
                                     model=transcript.model, device=transcript.device,
                                     segments=[c.model_copy(update={"text": c.text.replace("\n", " ")})
@@ -495,6 +546,19 @@ class Pipeline:
         finally:
             if not self.s.keep_intermediates:
                 shutil.rmtree(work, ignore_errors=True)
+
+    def _active_cuts(self, doc: CaptionDoc) -> list[cleanup.Cut]:
+        """Cortes ligados. Com a limpeza desligada, so os cortes manuais feitos no app."""
+        return [c for c in doc.cuts if c.enabled and (self.s.cleanup.enabled or c.kind == "manual")]
+
+    def _edited_doc(self, path: Path) -> CaptionDoc:
+        """Legendas no tempo do video editado (sem as palavras cortadas)."""
+        d = CaptionDoc.load(path)
+        cuts = self._active_cuts(d)
+        if cuts:
+            d = d.model_copy(update={"captions": cleanup.remap_captions(
+                d.captions, cuts, self.s.subtitles.max_chars_line)})
+        return d
 
     def _keywords(self, doc: CaptionDoc) -> list[str]:
         """Palavras-chave da legenda (IA ou editadas) + vocabulario da aula."""
