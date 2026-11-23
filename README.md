@@ -13,6 +13,8 @@ Nada sai do seu computador: a transcrição usa o Whisper e a IA usa o Ollama, a
 | Recurso | Resultado |
 | --- | --- |
 | **Limpeza da fala** | Encontra pausas e vícios (“é…”, “ãh”, “hum”) e sugere os cortes; você confere numa linha do tempo com onda do áudio, desfazer/refazer e atalhos. Mantém as pausas didáticas longas e exporta EDL para DaVinci Resolve ou Premiere |
+| **Editar pelo texto** | Apague palavras na transcrição e o trecho sai do vídeo; regravações (frase começada e repetida) são cortadas sozinhas |
+| **Relatório do professor** | Ritmo, vícios, palavras-muleta, regravações, perguntas para a turma e dicas para a próxima gravação |
 | **Legendas profissionais** | SRT, VTT e ASS em até 2 linhas de 42 caracteres, até 17 caracteres por segundo, 2 quadros entre legendas, sem cortar frases em "de", "que" ou "para". Inclui versão Shorts |
 | **Revisão** | Editor com o vídeo para corrigir texto e tempo antes de gerar o vídeo legendado, com localizar e substituir e correções automáticas para as próximas aulas |
 | **Vocabulário da aula** | Nomes, siglas e termos passados ao Whisper para ele acertar a grafia |

@@ -141,6 +141,11 @@ def test_pipeline_cuts_pauses_and_fillers_after_review(tmp_path, lesson_video):
     edited = ff.probe(Path(r.outputs["video_editado"]))
     assert 5.4 < edited.duration < 6.6  # 12 s - "éé" - pausa de 1,6 s - pausa de 4 s
     assert Path(r.outputs["edl_edicao"]).exists()
+    rel = Path(r.outputs["relatorio_professor"]).read_text(encoding="utf-8")
+    assert "Relatório da aula" in rel and "palavras por minuto" in rel
+    import json as _json
+    rep = _json.loads(Path(r.outputs["relatorio_professor_json"]).read_text(encoding="utf-8"))
+    assert rep["removed"]["vicio"] > 0 and rep["tips"]
     srt = Path(r.outputs["srt"]).read_text(encoding="utf-8")
     assert "éé" not in srt and "tchau" in srt
     last = [line for line in srt.splitlines() if "-->" in line][-1]

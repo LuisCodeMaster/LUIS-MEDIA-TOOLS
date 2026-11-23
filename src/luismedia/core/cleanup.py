@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field, model_validator
 from .models import Segment, Span, Word
 from .segmentation import normalize, wrap_two_lines
 
-CutKind = Literal["pausa", "vicio", "inicio", "fim", "manual"]
+CutKind = Literal["pausa", "vicio", "inicio", "fim", "manual", "texto", "repeticao"]
+USER_KINDS = {"manual", "texto"}  # feitos pelo usuario: nunca somem numa nova deteccao
 
 # Hesitacoes puras: cortadas por padrao
 # (nada de "um": em portugues e numero/artigo)
@@ -26,7 +27,7 @@ STRONG_FILLERS = {"aa", "aah", "ahn", "ann", "eh", "ehh", "ee", "eee", "eeh", "h
 # Palavras que as vezes sao vicio e as vezes nao: sugeridas, mas desmarcadas
 SOFT_FILLERS = {"ne", "tipo", "entao", "assim", "beleza", "ok", "certo", "ai", "ah"}
 LABELS = {"pausa": "Pausa", "vicio": "Vício", "inicio": "Silêncio no começo", "fim": "Silêncio no fim",
-          "manual": "Corte manual"}
+          "manual": "Corte manual", "texto": "Apagado no texto", "repeticao": "Regravação"}
 
 # Prompt que faz o Whisper escrever as hesitacoes em vez de omiti-las
 FILLER_PROMPT = "Hum, é... ãh, então, tipo, né? Ahn, é."
@@ -59,6 +60,7 @@ class CleanupSettings(BaseModel):
     max_pause_s: float = 6.0      # pausas maiores sao mantidas (demonstracao, escrita no quadro)
     fillers: bool = True
     trim_ends: bool = True
+    retakes: bool = True          # frases recomecadas ("a funcao... nao, a funcao quadratica")
 
 
 def _bare(text: str) -> str:
@@ -166,6 +168,8 @@ def detect_cuts(captions: Sequence[Segment], duration: float, cfg: CleanupSettin
             if e - s >= 0.05:
                 cuts.append(Cut(start=s, end=e, kind="vicio", enabled=kind == "strong",
                                 label=f"“{w.text.strip(' ,.?!…')}”" + ("" if kind == "strong" else " (talvez)")))
+    if cfg.retakes:
+        cuts += detect_retakes(captions)
     return sorted(cuts, key=lambda c: (c.start, c.end))
 
 
@@ -254,7 +258,93 @@ def remap_captions(captions: Sequence[Segment], cuts: Sequence[Cut], max_chars: 
 
 def merge_detected(old: Sequence[Cut], new: Sequence[Cut]) -> list[Cut]:
     """Nova deteccao: troca as sugestoes automaticas e mantem os cortes manuais do usuario."""
-    return sorted([*[c for c in old if c.kind == "manual"], *new], key=lambda c: (c.start, c.end))
+    return sorted([*[c for c in old if c.kind in USER_KINDS], *new], key=lambda c: (c.start, c.end))
+
+
+# ------------------------------------------------------------------ regravacoes
+# Palavras que indicam correcao no meio da fala
+CORRECTION_CUES = {"nao", "desculpa", "desculpe", "perdao", "alias", "digo", "opa", "ops", "corrigindo",
+                   "errei", "pera", "peraí", "perai", "espera"}
+CORRECTION_BIGRAMS = {("quer", "dizer"), ("ou", "melhor"), ("de", "novo"), ("deixa", "eu"), ("vou", "repetir"),
+                      ("vamos", "de"), ("me", "enganei"), ("falei", "errado")}
+MAX_ATTEMPT_WORDS = 30
+MAX_ATTEMPT_S = 20.0
+
+
+def _tok(text: str) -> str:
+    return _bare(text)
+
+
+def _phrase_start(words: Sequence[Word], toks: Sequence[str], i: int) -> bool:
+    if i == 0:
+        return True
+    prev = words[i - 1]
+    return (words[i].start - prev.end >= 0.25 or prev.text.strip()[-1:] in {".", "!", "?", ",", ";", ":", "…"}
+            or _squeeze(toks[i - 1]) in STRONG_FILLERS or toks[i - 1] in CORRECTION_CUES)
+
+
+def _has_cue(toks: Sequence[str]) -> bool:
+    if any(t in CORRECTION_CUES for t in toks):
+        return True
+    return any((a, b) in CORRECTION_BIGRAMS for a, b in zip(toks, toks[1:], strict=False))
+
+
+def detect_retakes(captions: Sequence[Segment]) -> list[Cut]:
+    """Frases que o professor comecou, errou ou interrompeu e falou de novo.
+
+    Padrao procurado: um trecho que comeca uma frase e e repetido logo depois (as primeiras
+    3+ palavras iguais), com algum sinal de interrupcao entre eles (pausa, "é...", "não",
+    "desculpa", "quer dizer"). A primeira tentativa vira corte e a ultima fica.
+    """
+    words = all_words(captions)
+    toks = [_tok(w.text) for w in words]
+    n = len(words)
+    cuts: list[Cut] = []
+    i = 0
+    while i < n:
+        if not toks[i]:
+            i += 1
+            continue
+        starts_phrase = _phrase_start(words, toks, i)
+        found = None
+        for j in range(i + 2, min(n, i + MAX_ATTEMPT_WORDS + 1)):
+            if words[j].start - words[i].start > MAX_ATTEMPT_S:
+                break
+            if toks[j] != toks[i]:
+                continue
+            k = 0
+            while i + k < j and j + k < n and toks[i + k] == toks[j + k]:
+                k += 1
+            att = j - i
+            tail = toks[i + k:j]
+            cue = _has_cue(tail)
+            filler = any(_squeeze(t) in STRONG_FILLERS for t in tail)
+            pause = words[j].start - words[j - 1].end
+            if k < 3 and not (k >= 2 and cue):
+                continue
+            if att - k > max(5, att // 2):  # a maior parte da tentativa precisa se repetir
+                continue
+            if not (cue or filler or pause >= 0.25 or k == att):
+                continue
+            if not starts_phrase and not (k >= 4 or cue or filler):  # meio de frase: exige mais
+                continue
+            found = (j, k, cue or filler, pause, k == att)
+            break
+        if not found:
+            i += 1
+            continue
+        j, k, cue, pause, exact = found
+        lo = words[i - 1].end if i > 0 else 0.0
+        s = max(lo, words[i].start - 0.04)
+        e = max(s + 0.05, words[j].start - 0.04)
+        attempt = " ".join(w.text.strip() for w in words[i:j]).strip(" ,")
+        if len(attempt) > 48:
+            attempt = attempt[:46].rstrip() + "…"
+        sure = cue or (exact and j - i <= 12) or pause >= 0.4
+        cuts.append(Cut(start=s, end=e, kind="repeticao", enabled=sure,
+                        label=f"Regravação: “{attempt}”" + ("" if sure else " (talvez)")))
+        i = j  # a nova tentativa pode ter sido interrompida de novo
+    return cuts
 
 
 def envelope_from_pcm(samples, sample_rate: int, rate: float = 50.0) -> list[float]:

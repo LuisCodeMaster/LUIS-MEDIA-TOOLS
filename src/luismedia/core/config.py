@@ -67,6 +67,7 @@ class CleanupConfig(_Strict):
     keep_pause_s: float = Field(0.3, ge=0, le=1.5)
     max_pause_s: float = Field(6.0, ge=1, le=60)  # maiores sao mantidas (demonstracao)
     fillers: bool = True                          # "é...", "ãh", "hum" (e sugere "né", "tipo")
+    retakes: bool = True                          # frases recomecadas: fica so a ultima tentativa
     trim_ends: bool = True
     export_edl: bool = True                       # timeline para DaVinci/Premiere
 
@@ -74,7 +75,8 @@ class CleanupConfig(_Strict):
         from .cleanup import CleanupSettings
 
         return CleanupSettings(pauses=self.pauses, min_pause_s=self.min_pause_s, keep_pause_s=self.keep_pause_s,
-                               max_pause_s=self.max_pause_s, fillers=self.fillers, trim_ends=self.trim_ends)
+                               max_pause_s=self.max_pause_s, fillers=self.fillers, trim_ends=self.trim_ends,
+                               retakes=self.retakes)
 
 
 class AudioConfig(_Strict):
@@ -137,6 +139,7 @@ class SlidesConfig(_Strict):
 
 
 class OutputConfig(_Strict):
+    teacher_report: bool = True  # Relatorio-do-Professor.html (ritmo, vicios, regravacoes, dicas)
     chapters: bool = True      # capitulos-youtube.txt somando os videos do lote
     zip_package: bool = True   # Entregavel.zip (sem os videos, que ja estao na pasta)
     zip_include_videos: bool = False

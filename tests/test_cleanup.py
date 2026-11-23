@@ -125,3 +125,67 @@ def test_envelope_from_pcm():
     sig = np.concatenate([np.zeros(8000), np.full(8000, 8000, dtype=np.int16)])
     env = envelope_from_pcm(sig.astype(np.int16), 16000, 50)
     assert len(env) == 50 and env[0] == 0 and env[-1] > 0.5
+
+
+# ------------------------------------------------------------------ regravacoes
+def _speech(spec: str) -> list[Segment]:
+    """'Hoje vamos |0.6 hoje vamos ver' -> palavras de 0,3 s; |x = pausa extra de x s."""
+    ws, t = [], 0.0
+    for tok in spec.split():
+        if tok.startswith("|"):
+            t += float(tok[1:])
+            continue
+        ws.append(W(t, 0.3, tok))
+        t += 0.35
+    return [seg(ws)]
+
+
+@pytest.mark.parametrize("spec,attempt,enabled", [
+    ("Então a função quadrática é |0.5 a função quadrática é definida assim.", "a função quadrática é", True),
+    ("A derivada de x é 3x, não, a derivada de x é 2x.", "A derivada de x é 3x, não", True),
+    ("Hoje vamos ver |0.6 hoje vamos ver funções.", "Hoje vamos ver", True),
+    ("Agora vamos calcular o delta, éé... agora vamos calcular o delta certo.", "Agora vamos calcular o delta, éé...", True),
+])
+def test_retakes_found(spec, attempt, enabled):
+    from luismedia.core.cleanup import detect_retakes
+
+    [c] = detect_retakes(_speech(spec))
+    assert c.kind == "repeticao" and attempt in c.label and c.enabled == enabled
+    out = remap_captions(_speech(spec), [c])
+    assert out[0].text.lower().count(attempt.split()[1].lower()) == 1  # sobrou so a ultima tentativa
+
+
+@pytest.mark.parametrize("spec", [
+    "a função f de x e a função g de x são iguais.",
+    "Isso é muito, muito importante.",
+    "x mais 2 vezes x mais 2 dá isso.",
+    "Primeiro passo, segundo passo, terceiro passo.",
+])
+def test_no_false_retakes(spec):
+    from luismedia.core.cleanup import detect_retakes
+
+    assert detect_retakes(_speech(spec)) == []
+
+
+def test_new_detection_keeps_text_cuts():
+    old = [Cut(start=1, end=2, kind="texto"), Cut(start=3, end=4, kind="repeticao")]
+    assert [c.kind for c in merge_detected(old, [])] == ["texto"]
+
+
+# ------------------------------------------------------------------ relatorio
+def test_teacher_report_numbers_and_html():
+    from luismedia.core.report import auto_tips, build_report, render_html, summary_line
+
+    caps = _speech("Hoje vamos ver |0.6 hoje vamos ver funções. É... basicamente, hum, funções servem pra quê? "
+                   "Basicamente basicamente basicamente basicamente basicamente.")
+    cuts = detect_cuts(caps, 30.0)
+    r = build_report(caps, cuts, 30.0)
+    assert r["words"] == len(caps[0].words) and r["wpm"] > 100
+    assert r["fillers"].get("hum") == 1 and len(r["retakes"]) == 1
+    assert r["crutches"].get("basicamente", 0) >= 5 and r["questions"] == 1
+    assert set(r["scores"]) == {"ritmo", "fluencia", "clareza", "engajamento", "geral"}
+    r["tips"] = auto_tips(r)
+    assert any("basicamente" in t for t in r["tips"])
+    page = render_html(r, "Aula <1>")
+    assert "Relatório da aula" in page and "Aula &lt;1&gt;" in page and "<script" not in page
+    assert "palavras/min" in summary_line(r)

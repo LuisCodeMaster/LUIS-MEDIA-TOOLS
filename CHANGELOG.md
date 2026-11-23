@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0] - 2026-11-23
+
+### Novo
+- **Editar pelo texto:** na revisão, a transcrição vira um documento. Clique numa palavra para ir
+  até ela; selecione e aperte Delete para tirar o trecho do vídeo; o que vai sair aparece riscado
+  e pode ser restaurado. A palavra falada fica destacada enquanto o vídeo toca.
+- **Regravações saem sozinhas:** quando a frase é começada e repetida ("a função… não, a função
+  quadrática é…"), a primeira tentativa vira corte e fica só a última. Casos duvidosos vêm
+  desmarcados. Botão "Procurar regravações" para vídeos já processados.
+- **Relatório do professor** (`documentos/Relatorio-do-Professor.html`): palavras por minuto ao
+  longo da aula, vícios e palavras-muleta, regravações, perguntas para a turma, tempo economizado,
+  notas de ritmo, fluência, clareza e engajamento, e dicas para a próxima gravação (com a IA local,
+  quando o Ollama está aberto). Resumo e botão na tela Início.
+
 ## [1.4.1] - 2026-11-22
 
 ### Corrigido

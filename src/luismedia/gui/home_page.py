@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..adapters import ffmpeg as ff
 from ..cli import VIDEO_EXT
+from ..core.report import summary_line
 from ..core.style import PRESETS_H
 from ..core.sync import PACE_LABELS
 from . import state
@@ -166,7 +167,7 @@ class HomePage(QWidget):
         prow.addStretch(1)
         prow.addWidget(self.pace_box)
         rl.addLayout(prow)
-        self.o_clean = toggle("Cortar pausas e vícios (é…, ãh, hum)",
+        self.o_clean = toggle("Cortar pausas, vícios e regravações",
                               "Encurta silêncios e tira hesitações. Você confere tudo antes, se a revisão estiver ligada.")
         self.o_review = toggle("Revisar antes de gerar o vídeo",
                                "Para depois da transcrição e abre a linha do tempo para conferir texto e cortes")
@@ -215,9 +216,11 @@ class HomePage(QWidget):
         self.btn_review.setObjectName("primary")
         self.btn_open = QPushButton("Abrir vídeo final")
         self.btn_open.setObjectName("primary")
+        self.btn_report = QPushButton("Relatório da aula")
+        self.btn_report.setToolTip("Ritmo, vícios, regravações e dicas para a próxima gravação")
         acts.addWidget(self.btn_new)
         acts.addStretch(1)
-        for b in (self.btn_cancel, self.btn_folder, self.btn_review, self.btn_open):
+        for b in (self.btn_cancel, self.btn_folder, self.btn_report, self.btn_review, self.btn_open):
             acts.addWidget(b)
         ul.addWidget(self.r_title)
         ul.addWidget(self.r_stage)
@@ -236,6 +239,7 @@ class HomePage(QWidget):
         self.btn_new.clicked.connect(lambda _c=False: self.reset())
         self.btn_folder.clicked.connect(lambda _c=False: QDesktopServices.openUrl(QUrl.fromLocalFile(self._out_dir())))
         self.btn_open.clicked.connect(lambda _c=False: self._open_final())
+        self.btn_report.clicked.connect(lambda _c=False: self._open_report())
         self.btn_review.clicked.connect(lambda _c=False: self.review_requested.emit(
             str(self._out_root()), self.video.stem if self.video else ""))
         self.reset()
@@ -302,7 +306,7 @@ class HomePage(QWidget):
     # ------------------------------------------------------------------ gerar
     def overrides(self) -> dict:
         clean = self.o_clean.isChecked()
-        ov: dict = {"cleanup": {"enabled": clean, "pauses": clean, "fillers": clean},
+        ov: dict = {"cleanup": {"enabled": clean, "pauses": clean, "fillers": clean, "retakes": clean},
                     "autocut": {"enabled": False},
                     "subtitles": {"review": self.o_review.isChecked(),
                                   "pace": self.pace_box.currentData() or "padrao"}}
@@ -345,7 +349,7 @@ class HomePage(QWidget):
         self.r_stage.setText("Preparando…")
         self.r_bar.setValue(0)
         banner(self.r_msg, "info", "")
-        for b in (self.btn_folder, self.btn_review, self.btn_open, self.btn_new):
+        for b in (self.btn_folder, self.btn_review, self.btn_open, self.btn_new, self.btn_report):
             b.setVisible(False)
         self.btn_cancel.setVisible(True)
         job.signals.event.connect(self._on_event)
@@ -387,8 +391,12 @@ class HomePage(QWidget):
             return
         self.r_title.setText("Pronto! ✓")
         warn = r.get("warnings") or []
-        self.r_stage.setText(f"Vídeo final: {fmt_duration(r.get('duration') or 0)}"
-                             + (f" · {len(warn)} aviso(s)" if warn else ""))
+        line = f"Vídeo final: {fmt_duration(r.get('duration') or 0)}" + (f" · {len(warn)} aviso(s)" if warn else "")
+        rep = self._report_data()
+        if rep:
+            line += f"\nAula: {summary_line(rep)}"
+        self.r_stage.setText(line)
+        self.btn_report.setVisible(rep is not None)
         if warn:
             banner(self.r_msg, "warn", "\n".join(warn))
         self.btn_open.setVisible(bool(self._final_video()))
@@ -417,6 +425,20 @@ class HomePage(QWidget):
             if out.get(k) and Path(out[k]).exists():
                 return out[k]
         return None
+
+    def _report_data(self) -> dict | None:
+        import json
+
+        p = ((self._result or {}).get("outputs") or {}).get("relatorio_professor_json")
+        try:
+            return json.loads(Path(p).read_text(encoding="utf-8")) if p else None
+        except (OSError, ValueError):
+            return None
+
+    def _open_report(self) -> None:
+        p = ((self._result or {}).get("outputs") or {}).get("relatorio_professor")
+        if p and Path(p).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(p))
 
     def _open_final(self) -> None:
         f = self._final_video()
