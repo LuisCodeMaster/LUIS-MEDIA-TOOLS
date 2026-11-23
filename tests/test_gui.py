@@ -258,7 +258,7 @@ def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video,
     home.o_clean.setChecked(True)
     home.o_review.setChecked(True)
     ov = home.overrides()
-    assert ov["cleanup"]["enabled"] and ov["subtitles"]["review"]
+    assert ov["cleanup"]["enabled"] and ov["subtitles"]["review"] and ov["subtitles"]["pace"] == "padrao"
     home.btn_go.click()
     assert home.steps.currentIndex() == 2
     assert pump(app, lambda: home.btn_review.isVisibleTo(w), 120), home.r_msg.text()
@@ -302,6 +302,20 @@ def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video,
     ed.seek(5.0)
     app.sendEvent(ed, QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_L, Qt.KeyboardModifier.NoModifier))
     assert ed.timeline.playhead == pytest.approx(8.0)
+
+    # ritmo e sincronia (com desfazer)
+    n0, t0 = len(ed.doc.captions), ed.doc.captions[-1].start
+    ed.set_pace("rapido")
+    assert ed.doc.pace == "rapido" and len(ed.doc.captions) > n0
+    assert ed.pace.currentData() == "rapido" and ed.table.rowCount() == len(ed.doc.captions)
+    ed.undo()
+    assert ed.doc.pace == "padrao" and len(ed.doc.captions) == n0
+    ed.shift(0.1)
+    assert ed.doc.captions[-1].start == pytest.approx(t0 + 0.1) and ed.offset_lbl.text() == "+0,10 s"
+    ed.undo()
+    assert ed.offset_lbl.text() == "+0,00 s"
+    ed.snap()  # ja encaixadas na transcricao
+    assert "já estão" in ed.msg.text()
 
     ed.btn_approve.click()  # volta para o Inicio e gera o video final
     assert w.stack.currentWidget() is home

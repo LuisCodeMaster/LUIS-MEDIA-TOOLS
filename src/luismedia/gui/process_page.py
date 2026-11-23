@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from ..adapters import ffmpeg as ff
 from ..cli import VIDEO_EXT
+from ..core.sync import PACE_LABELS
 from ..diagnostics import builtin_profiles
 from . import state, theme
 from .tasks import PipelineJob, run_task, start_job
@@ -245,7 +246,13 @@ class ProcessPage(QWidget):
         self.o_vocab.setPlaceholderText("Ex.: Vygotsky, LGPD, Bhaskara")
         self.o_vocab.setToolTip("Nomes, siglas e termos técnicos da aula, separados por vírgula. "
                                 "Ajudam o Whisper a escrever certo.")
+        self.o_pace = QComboBox()
+        for key, label in PACE_LABELS.items():
+            self.o_pace.addItem(label, key)
+        self.o_pace.setToolTip("Rápido: blocos curtos que trocam junto com a fala. Devagar: mais tempo para ler.")
         leg.body.addWidget(self.o_review)
+        leg.body.addWidget(QLabel("Ritmo da legenda"))
+        leg.body.addWidget(self.o_pace)
         leg.body.addWidget(QLabel("Vocabulário da aula"))
         leg.body.addWidget(self.o_vocab)
         leg.body.addWidget(hint("O estilo (fonte, cores, karaokê) fica na tela Estilo das legendas."))
@@ -318,7 +325,7 @@ class ProcessPage(QWidget):
         self._refresh_queue()
 
     def _option_widgets(self) -> list[QWidget]:
-        return [self.o_autocut, self.o_fillers, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
+        return [self.o_pace, self.o_autocut, self.o_fillers, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
                 self.o_encoder, self.o_slides, self.o_handout, self.o_pdf, self.o_summary, self.o_quiz,
                 self.o_clips, self.o_clips_n]
 
@@ -333,7 +340,8 @@ class ProcessPage(QWidget):
                         "export_edl": self.o_edl.isChecked(), "max_pause_s": self.o_pause.value()},
             "audio": {"master": self.o_master.isChecked()},
             "render": {"hardsub": self.o_hardsub.isChecked(), "encoder": ENCODERS[self.o_encoder.currentIndex()][1]},
-            "subtitles": {"shorts_version": self.o_shorts.isChecked(), "review": self.o_review.isChecked()},
+            "subtitles": {"shorts_version": self.o_shorts.isChecked(), "review": self.o_review.isChecked(),
+                          "pace": self.o_pace.currentData() or "padrao"},
             "whisper": {"vocabulary": [t.strip() for t in self.o_vocab.text().split(",") if t.strip()]},
             "slides": {"enabled": self.o_slides.isChecked(), "handout": self.o_handout.isChecked(),
                        "handout_pdf": self.o_handout.isChecked() and self.o_pdf.isChecked()},
@@ -352,6 +360,7 @@ class ProcessPage(QWidget):
             self.o_master.setChecked(s.audio.master)
             self.o_hardsub.setChecked(s.render.hardsub)
             self.o_shorts.setChecked(s.subtitles.shorts_version)
+            self.o_pace.setCurrentIndex(max(0, self.o_pace.findData(s.subtitles.pace)))
             self.o_encoder.setCurrentIndex(next((i for i, (_, v) in enumerate(ENCODERS) if v == s.render.encoder.value), 0))
             self.o_slides.setChecked(s.slides.enabled)
             self.o_handout.setChecked(s.slides.handout)

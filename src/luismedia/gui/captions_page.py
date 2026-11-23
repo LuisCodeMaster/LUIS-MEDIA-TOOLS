@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
@@ -38,7 +39,8 @@ from ..core.captions import CaptionDoc, apply_replacements, realign_words, rebal
 from ..core.cleanup import Cut, envelope_from_pcm, read_envelope_wav, removed_seconds
 from ..core.models import Segment
 from ..core.segmentation import cps
-from ..pipeline.runner import captions_edited, find_reviews
+from ..core.sync import PACE_LABELS, resegment, shift_all, snap_to_speech
+from ..pipeline.runner import caption_rules, captions_edited, find_reviews
 from . import state, theme
 from .tasks import run_task
 from .timeline import Timeline
@@ -170,8 +172,8 @@ class CaptionsPage(QWidget):
         self.videos = QListWidget()
         self.videos.setObjectName("nav")
         left.body.addWidget(self.videos, 1)
-        left.setMinimumWidth(190)
-        left.setMaximumWidth(250)
+        left.setMinimumWidth(170)
+        left.setMaximumWidth(210)
         split.addWidget(left)
 
         # ---- player + linha do tempo + tabela
@@ -261,8 +263,8 @@ class CaptionsPage(QWidget):
 
         # ---- painel da direita (abas)
         self.side = QTabWidget()
-        self.side.setMinimumWidth(290)
-        self.side.setMaximumWidth(360)
+        self.side.setMinimumWidth(320)
+        self.side.setMaximumWidth(380)
         self.side.addTab(self._tab_caption(), "Legenda")
         self.side.addTab(self._tab_cuts(), "Cortes")
         self.side.addTab(self._tab_text(), "Texto")
@@ -293,6 +295,10 @@ class CaptionsPage(QWidget):
         self.btn_all_on.clicked.connect(lambda _c=False: self._set_all_cuts(True))
         self.btn_all_off.clicked.connect(lambda _c=False: self._set_all_cuts(False))
         self.btn_cut_remove.clicked.connect(lambda _c=False: self._remove_cut())
+        self.pace.activated.connect(lambda i: self.set_pace(self.pace.itemData(i)))
+        self.btn_earlier.clicked.connect(lambda _c=False: self.shift(-0.1))
+        self.btn_later.clicked.connect(lambda _c=False: self.shift(0.1))
+        self.btn_snap.clicked.connect(lambda _c=False: self.snap())
         self.timeline.seek_requested.connect(self.seek)
         self.timeline.caption_selected.connect(lambda i: self.table.selectRow(i))
         self.timeline.caption_edit_started.connect(lambda _i: self._begin_pending())
@@ -323,12 +329,12 @@ class CaptionsPage(QWidget):
             sp.setDecimals(2)
             sp.setSingleStep(0.1)
             sp.setSuffix(" s")
-            sp.setFixedWidth(110)
+            sp.setFixedWidth(100)
         self.cps_info = hint("")
         self.btn_apply = QPushButton("Aplicar")
         self.btn_apply.setObjectName("primary")
         self.btn_balance = QPushButton("Rebalancear linhas")
-        self.btn_merge = QPushButton("Juntar com a próxima")
+        self.btn_merge = QPushButton("Juntar à próxima")
         self.btn_delete = QPushButton("Excluir legenda")
         lay.addWidget(self.text)
         lay.addWidget(row(QLabel("Início"), self.start, QLabel("Fim"), self.end))
@@ -337,6 +343,27 @@ class CaptionsPage(QWidget):
         lay.addWidget(row(self.btn_merge, self.btn_delete))
         lay.addWidget(hint("Dica: arraste os blocos na linha do tempo para ajustar os tempos; "
                            "puxe as bordas para encurtar ou alongar."))
+
+        lay.addSpacing(10)
+        cap = QLabel("TODAS AS LEGENDAS")
+        cap.setObjectName("caption")
+        lay.addWidget(cap)
+        self.pace = QComboBox()
+        for key, label in PACE_LABELS.items():
+            self.pace.addItem(label, key)
+        self.pace.setToolTip("Refaz os blocos de legenda: rápido troca junto com a fala, devagar dá mais "
+                             "tempo para ler. Suas correções de texto são mantidas.")
+        lay.addWidget(row(QLabel("Ritmo"), self.pace, stretch_last=True))
+        self.btn_earlier = QPushButton("−0,1 s")
+        self.btn_earlier.setToolTip("A legenda aparece DEPOIS da fala? Adiante todas em 0,1 s")
+        self.btn_later = QPushButton("+0,1 s")
+        self.btn_later.setToolTip("A legenda aparece ANTES da fala? Atrase todas em 0,1 s")
+        self.offset_lbl = QLabel("0,00 s")
+        self.offset_lbl.setObjectName("timecode")
+        lay.addWidget(row(QLabel("Sincronia"), self.btn_earlier, self.offset_lbl, self.btn_later))
+        self.btn_snap = QPushButton("Encaixar no início da fala")
+        self.btn_snap.setToolTip("Corrige legendas que aparecem antes da voz, usando o volume do áudio")
+        lay.addWidget(self.btn_snap)
         lay.addStretch(1)
         return w
 
@@ -391,7 +418,8 @@ class CaptionsPage(QWidget):
     def _set_enabled(self, on: bool) -> None:
         for w in (self.btn_apply, self.btn_balance, self.btn_merge, self.btn_delete, self.btn_replace,
                   self.btn_save, self.btn_approve, self.text, self.start, self.end, self.keywords,
-                  self.btn_all_on, self.btn_all_off, self.btn_play, self.timeline):
+                  self.btn_all_on, self.btn_all_off, self.btn_play, self.timeline, self.pace,
+                  self.btn_earlier, self.btn_later, self.btn_snap):
             w.setEnabled(on)
         self._sync_undo()
 
@@ -447,6 +475,7 @@ class CaptionsPage(QWidget):
         self.keywords.blockSignals(True)
         self.keywords.setText(", ".join(self.doc.keywords))
         self.keywords.blockSignals(False)
+        self._show_pace()
         self.doc_opened.emit(self.doc)
         self.timeline.reset_view()
         self.timeline.set_envelope([])
@@ -539,7 +568,8 @@ class CaptionsPage(QWidget):
         assert self.doc is not None
         return json.dumps({"captions": [c.model_dump() for c in self.doc.captions],
                            "cuts": [c.model_dump() for c in self.doc.cuts],
-                           "keywords": self.doc.keywords})
+                           "keywords": self.doc.keywords, "pace": self.doc.pace,
+                           "sync_offset": self.doc.sync_offset})
 
     def _checkpoint(self) -> None:
         if not self.doc:
@@ -559,7 +589,10 @@ class CaptionsPage(QWidget):
         self.doc.captions = [Segment.model_validate(c) for c in data["captions"]]
         self.doc.cuts = [Cut.model_validate(c) for c in data["cuts"]]
         self.doc.keywords = data["keywords"]
+        self.doc.pace = data.get("pace", self.doc.pace)
+        self.doc.sync_offset = data.get("sync_offset", self.doc.sync_offset)
         self.keywords.setText(", ".join(self.doc.keywords))
+        self._show_pace()
         self.dirty = True
         sel = min(self._sel, len(self.doc.captions) - 1)
         self._refresh_all()
@@ -691,6 +724,65 @@ class CaptionsPage(QWidget):
             if i == self._sel:
                 self.start.setValue(start)
                 self.end.setValue(end)
+
+    # ------------------------------------------------------------------ ritmo e sincronia
+    def _show_pace(self) -> None:
+        if not self.doc:
+            return
+        i = self.pace.findData(self.doc.pace)
+        self.pace.setCurrentIndex(i if i >= 0 else self.pace.findData("padrao"))
+        self.offset_lbl.setText(f"{self.doc.sync_offset:+.2f} s".replace(".", ","))
+
+    def _env(self) -> tuple[list[float] | None, float]:
+        return (list(self.timeline.env) or None), self.timeline.env_rate
+
+    def set_pace(self, key: str) -> None:
+        """Refaz os blocos no novo ritmo (mantendo o texto corrigido) e encaixa na voz."""
+        if not self.doc or not key:
+            return
+        self._checkpoint()
+        base = state.load_base_settings()
+        rules = caption_rules(state.compose(base, {"subtitles": {"pace": key}}))
+        env, rate = self._env()
+        self.doc.captions = resegment(self.doc.captions, rules, env, rate)
+        self.doc.pace = key
+        self._sel = min(self._sel, len(self.doc.captions) - 1)
+        self._after_bulk_change()
+        banner(self.msg, "ok", f"Legendas refeitas no ritmo {PACE_LABELS[key].split(' (')[0].lower()} "
+                               f"({len(self.doc.captions)} legendas). Ctrl+Z desfaz.")
+
+    def shift(self, delta: float) -> None:
+        if not self.doc or not self.doc.captions:
+            return
+        self._checkpoint()
+        self.doc.captions = shift_all(self.doc.captions, delta)
+        self.doc.sync_offset = round(self.doc.sync_offset + delta, 3)
+        self._after_bulk_change()
+
+    def snap(self) -> None:
+        if not self.doc:
+            return
+        env, rate = self._env()
+        if not env:
+            banner(self.msg, "warn", "A onda do áudio ainda está carregando. Tente de novo em instantes.")
+            return
+        new = snap_to_speech(self.doc.captions, env, rate)
+        moved = sum(1 for a, b in zip(self.doc.captions, new, strict=True) if abs(a.start - b.start) > 0.02)
+        if not moved:
+            banner(self.msg, "ok", "As legendas já estão no início da fala.")
+            return
+        self._checkpoint()
+        self.doc.captions = new
+        self._after_bulk_change()
+        banner(self.msg, "ok", f"{moved} legenda(s) encaixada(s) no início da fala. Ctrl+Z desfaz.")
+
+    def _after_bulk_change(self) -> None:
+        sel = max(0, self._sel)
+        self._show_pace()
+        self._fill_table()
+        self._refresh_timeline()
+        if self.doc and self.doc.captions:
+            self.table.selectRow(min(sel, len(self.doc.captions) - 1))
 
     # ------------------------------------------------------------------ cortes
     def toggle_cut(self, k: int) -> None:

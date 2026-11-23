@@ -11,6 +11,7 @@ import os
 import sys
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -121,6 +122,8 @@ class SubtitleConfig(_Strict):
     min_gap_s: float = Field(0.083, ge=0, le=0.5)      # 2 quadros entre legendas
     shorts_version: bool = True
     review: bool = False                               # parar para revisar antes de queimar
+    pace: Literal["rapido", "padrao", "devagar"] = "padrao"  # ritmo da legenda (core.sync.PACES)
+    snap_to_speech: bool = True                        # encaixa o inicio no comeco real da voz
     replacements: dict[str, str] = {}                  # correcoes automaticas: "Wisper" -> "Whisper"
     style_h: SubtitleStyle = SubtitleStyle()           # legenda queimada (16:9)
     style_v: SubtitleStyle = PRESETS_V["CapCut amarelo"].model_copy()  # cortes 9:16

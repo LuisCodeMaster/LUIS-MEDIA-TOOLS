@@ -41,6 +41,7 @@ class SegmentationRules:
     gap: float = 0.083        # 2 quadros a 24 fps (padrao Netflix)
     max_cps: float = 17.0     # caracteres por segundo
     max_words: int = 0        # 0 = sem limite
+    min_words_split: int = 6  # palavras minimas antes de quebrar por tamanho
 
 
 def normalize(text: str) -> str:
@@ -91,7 +92,7 @@ def build_blocks(words: list[Word], r: SegmentationRules) -> list[list[Word]]:
             brk = True
         elif duration >= r.max_duration:
             brk = not weak
-        elif len(candidate) > r.max_block_chars and len(cur) >= 6:
+        elif len(candidate) > r.max_block_chars and len(cur) >= r.min_words_split:
             brk = not weak
         else:
             brk = False
