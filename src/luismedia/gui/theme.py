@@ -130,5 +130,18 @@ QSlider#timeline::handle:horizontal {{ background: {TEXT}; width: 12px; height: 
                                       border-radius: 6px; }}
 QSlider#timeline::groove:horizontal:disabled {{ background: {SURFACE}; }}
 QSlider#timeline::handle:horizontal:disabled {{ background: {BORDER}; }}
+QPushButton#iconBtn {{ padding: 0; font-size: 12pt; font-weight: 700; }}
+QWidget#timeline {{ border-radius: 8px; }}
+QListWidget#cutsList {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; color: {TEXT};
+                       padding: 4px; outline: none; }}
+QListWidget#cutsList::item {{ padding: 6px 4px; border-radius: 6px; color: {TEXT}; }}
+QListWidget#cutsList::item:selected {{ background: {SURFACE_2}; color: {TEXT}; }}
+QLabel#heroTitle {{ font-size: 22pt; font-weight: 800; color: {TEXT}; }}
+QLabel#dropIcon {{ font-size: 30pt; color: {ACCENT}; }}
+QLabel#thumb {{ background: #0a0b11; border-radius: 8px; font-size: 26pt; }}
+QPushButton#hero {{ background: {ACCENT_STRONG}; border: none; color: white; font-size: 11pt; font-weight: 700;
+                   padding: 11px 26px; border-radius: 10px; }}
+QPushButton#hero:hover {{ background: {ACCENT}; }}
+QPushButton#hero:disabled {{ background: {SURFACE_2}; color: #5d6478; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
 """

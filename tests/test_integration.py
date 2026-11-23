@@ -13,7 +13,7 @@ from luismedia.adapters import ffmpeg as ff
 from luismedia.core import subtitles
 from luismedia.core.config import AudioConfig, AutoCutConfig, Encoder, Settings
 from luismedia.core.errors import InvalidMedia, ProcessFailed, ProcessTimeout
-from luismedia.core.models import Segment, Transcript
+from luismedia.core.models import Segment, Transcript, Word
 from luismedia.stages import media
 
 from .conftest import needs_ffmpeg, needs_libass
@@ -93,6 +93,23 @@ def test_hardsub_with_hostile_path(tmp_path, lesson_video):
     assert ff.probe(out).duration > 11
 
 
+def _w(t: float, d: float, x: str) -> Word:
+    return Word(start=t, end=t + d, text=x)
+
+
+class WordyWhisper:
+    """Fala com hesitacao, encaixada no audio do lesson_video (fala 0-3, 4.5-7, 11-12)."""
+
+    def transcribe(self, audio, duration, on_progress=None):
+        a = [_w(0.1, .4, "Olá"), _w(0.6, .4, "turma,"), _w(1.3, .7, "éé..."), _w(2.2, .4, "hoje"),
+             _w(2.65, .3, "vamos")]
+        b = [_w(4.6, .6, "aprender"), _w(5.3, .6, "Python,"), _w(6.0, .3, "né?"), _w(6.4, .5, "agora")]
+        c = [_w(11.1, .7, "tchau.")]
+        segs = [Segment(start=x[0].start, end=x[-1].end, text=" ".join(w.text for w in x), words=x)
+                for x in (a, b, c)]
+        return Transcript(language="pt", duration=duration, model="fake", device="cpu", segments=segs)
+
+
 class FakeWhisper:
     def transcribe(self, audio, duration, on_progress=None):
         return Transcript(language="pt", duration=duration, model="fake", device="cpu",
@@ -100,11 +117,52 @@ class FakeWhisper:
 
 
 @needs_libass
+def test_pipeline_cuts_pauses_and_fillers_after_review(tmp_path, lesson_video):
+    pytest.importorskip("numpy")
+    from luismedia.core.captions import CaptionDoc
+    from luismedia.pipeline.runner import Pipeline, captions_edited
+
+    s = Settings(render={"encoder": "libx264", "crf": 32}, llm={"enabled": False}, audio={"master": False},
+                 slides={"enabled": False, "handout": False}, subtitles={"review": True})
+    p = Pipeline(s)
+    p.whisper = WordyWhisper()
+    [r] = p.run([lesson_video], tmp_path / "saida")
+    assert r.ok and r.needs_review
+    capp = Path(r.outputs["captions"])
+    doc = CaptionDoc.load(capp)
+    kinds = sorted((c.kind, c.enabled) for c in doc.cuts)
+    assert kinds == [("pausa", True), ("pausa", True), ("vicio", False), ("vicio", True)]
+    assert Path(r.outputs["envelope"]).exists()
+
+    doc.approved = True
+    doc.save(capp)
+    [r] = p.run([lesson_video], tmp_path / "saida")
+    assert r.ok and not r.needs_review, r.error
+    edited = ff.probe(Path(r.outputs["video_editado"]))
+    assert 5.4 < edited.duration < 6.6  # 12 s - "éé" - pausa de 1,6 s - pausa de 4 s
+    assert Path(r.outputs["edl_edicao"]).exists()
+    srt = Path(r.outputs["srt"]).read_text(encoding="utf-8")
+    assert "éé" not in srt and "tchau" in srt
+    last = [line for line in srt.splitlines() if "-->" in line][-1]
+    t = float(last[6:12].replace(",", "."))
+    assert 4.5 < t < 5.6, last  # "tchau" saiu de 11 s para ~5 s
+    assert abs(ff.probe(Path(r.outputs["video_legendado"])).duration - edited.duration) < 0.3
+
+    # o usuario desliga a pausa longa no app: so a edicao e as legendas sao refeitas
+    doc = CaptionDoc.load(capp)
+    doc.cuts = [c.model_copy(update={"enabled": False}) if c.duration > 3 else c for c in doc.cuts]
+    doc.save(capp)
+    captions_edited(capp.parent.parent)
+    [r] = p.run([lesson_video], tmp_path / "saida")
+    assert 9.3 < ff.probe(Path(r.outputs["video_editado"])).duration < 10.6
+
+
+@needs_libass
 def test_pipeline_end_to_end_with_checkpoint(tmp_path, lesson_video, monkeypatch):
     from luismedia.pipeline.runner import Pipeline
 
     s = Settings(render={"encoder": "libx264", "crf": 30}, llm={"enabled": False},
-                 slides={"handout_pdf": False})
+                 slides={"handout_pdf": False}, autocut={"enabled": True})
     events = []
     p = Pipeline(s, listeners=[events.append])
     p.whisper = FakeWhisper()

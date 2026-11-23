@@ -1,6 +1,7 @@
 # Pre-edicao para DaVinci Resolve / Premiere: autocut + EDL + legendas. Sem IA.
 profile_name: pre-edicao-nle
-autocut: {enabled: true, export_edl: true}
+autocut: {enabled: false}
+cleanup: {enabled: true, fillers: true, export_edl: true}
 audio: {master: true, target_lufs: -14}
 render: {encoder: auto, hardsub: false}
 slides: {enabled: false, handout: false, handout_pdf: false}
