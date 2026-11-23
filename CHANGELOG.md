@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.3] - 2026-11-23
+
+### Corrigido
+- **Legenda cada vez mais adiantada em relação à voz no vídeo final.** Ao tirar pausas e vícios,
+  cada trecho do vídeo era cortado num número inteiro de quadros, ganhando até 1 quadro por
+  corte. Com centenas de cortes, a imagem e o som iam ficando para trás das legendas (meio
+  segundo ou mais no fim da aula). O corte agora leva cada quadro e cada amostra de áudio para o
+  tempo exato que as legendas usam: sem deriva do começo ao fim.
+- Vídeos editados por versões anteriores são refeitos sozinhos no próximo processamento
+  (as legendas revisadas são mantidas).
+
 ## [1.5.2] - 2026-11-23
 
 ### Corrigido

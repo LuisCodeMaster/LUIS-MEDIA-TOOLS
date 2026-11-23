@@ -307,3 +307,48 @@ def test_whisper_receives_decoded_audio_not_a_path(tmp_path, lesson_video):
     eng._load = lambda *a: FakeModel()
     eng.transcribe(wav, info.duration)
     assert isinstance(seen["audio"], np.ndarray)
+
+
+@needs_ffmpeg
+def test_many_cuts_do_not_drift(tmp_path):
+    """Com muitos cortes, imagem e som do video editado continuam no tempo das legendas
+    (o motor antigo atrasava ate 1 quadro por corte: legenda antes da voz no fim da aula)."""
+    np = pytest.importorskip("numpy")
+    import random
+    import subprocess
+
+    from luismedia.core.cleanup import Cut, TimeMap, kept_spans
+    from luismedia.core.config import Encoder
+    from luismedia.stages import media
+
+    src = tmp_path / "flash.mp4"
+    subprocess.run([ff.find_binary("ffmpeg"), "-v", "error", "-y", "-f", "lavfi", "-i",
+                    "color=c=black:s=160x120:r=30:d=20", "-f", "lavfi", "-i", "sine=f=1000:sample_rate=48000:d=20",
+                    "-filter_complex", "[0:v]format=gray,geq=lum='if(lt(mod(T+0.5\\,1)\\,0.1)\\,255\\,16)'[v];"
+                    "[1:a]volume='if(lt(mod(t+0.5,1),0.1),1,0)':eval=frame[a]",
+                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(src)],
+                   check=True)
+    rnd = random.Random(2)
+    cuts = []
+    for k in range(19):  # um corte entre cada "bip" (como pausas entre frases)
+        a = 0.5 + k + 0.15 + rnd.uniform(0, 0.2)
+        cuts.append(Cut(start=round(a, 3), end=round(a + rnd.uniform(0.11, 0.5), 3)))
+    out = media.render_autocut(ff.probe(src), kept_spans(cuts, 20.0), tmp_path / "out.mp4",
+                               encoder=Encoder.CPU, crf=32, work=tmp_path)
+    expected = [TimeMap(cuts)(0.5 + k) for k in range(20)]
+
+    raw = subprocess.run([ff.find_binary("ffmpeg"), "-v", "error", "-i", str(out), "-ac", "1", "-ar", "8000",
+                          "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    x = np.abs(np.frombuffer(raw, dtype=np.int16)).astype(float)
+    env = np.convolve(x, np.ones(80) / 80, "same")
+    beeps = np.where((env[1:] > env.max() * 0.3) & (env[:-1] <= env.max() * 0.3))[0] / 8000
+    frames = subprocess.run([ff.find_binary("ffmpeg"), "-v", "error", "-i", str(out), "-vf", "scale=8:8,format=gray",
+                             "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    lum = np.frombuffer(frames, dtype=np.uint8).reshape(-1, 64).mean(axis=1)
+    pts = [float(p.strip(",")) for p in subprocess.run(
+        [ff.find_binary("ffprobe"), "-v", "error", "-select_streams", "v", "-show_entries", "frame=pts_time",
+         "-of", "csv=p=0", str(out)], capture_output=True, text=True, check=True).stdout.split() if p.strip(",")]
+    flashes = [pts[i] for i in range(1, len(lum)) if lum[i] > 128 >= lum[i - 1]]
+    assert len(beeps) == 20 and len(flashes) == 20
+    assert abs(beeps[-1] - expected[-1]) < 0.05, (beeps[-1], expected[-1])  # som no tempo das legendas
+    assert abs(flashes[-1] - expected[-1]) < 0.05, (flashes[-1], expected[-1])  # imagem tambem

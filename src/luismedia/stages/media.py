@@ -96,17 +96,31 @@ def speech_spans(silences: list[Span], duration: float, cfg: AutoCutConfig) -> l
 
 
 def autocut_filter(spans: list[Span]) -> str:
-    """Um unico filtergraph trim+concat: 1 decodificacao, 1 codificacao, A/V em sincronia.
+    """Corta os trechos fora de ``spans`` sem deriva entre video, audio e legendas.
 
-    O motor antigo re-codificava cada fatia em 'ultrafast' e concatenava com -c copy
-    (perda de qualidade dupla e risco de estalo/dessincronia de AAC nas emendas).
+    Audio: atrim por trecho + concat (precisao de amostra: a duracao final e exatamente a
+    soma dos trechos). Video: select + setpts que leva cada quadro para o tempo "original menos
+    tudo o que foi cortado antes dele" (a mesma conta das legendas, core.cleanup.TimeMap).
+
+    O motor anterior cortava o video com trim+concat: cada trecho virava um numero inteiro de
+    quadros, ate 1 quadro a mais por corte. Com centenas de cortes (pausas e vicios) o video
+    ia ficando para tras das legendas (legenda aparecendo antes da voz no fim da aula).
     """
-    parts, labels = [], []
+    gaps: list[tuple[float, float | None]] = []
+    cursor = 0.0
+    for s in spans:
+        if s.start - cursor > 1e-4:
+            gaps.append((cursor, s.start))
+        cursor = s.end
+    gaps.append((cursor, None))  # tudo depois do ultimo trecho
+    sel = "+".join(f"between(t,{a:.4f},{b:.4f})" if b is not None else f"gte(t,{a:.4f})" for a, b in gaps)
+    shift = "+".join(f"clip(T-{a:.4f},0,{b - a:.4f})" for a, b in gaps if b is not None) or "0"
+    parts = [f"[0:v]select='not({sel})',setpts='(T-({shift}))/TB'[vout];"]
+    labels = []
     for i, s in enumerate(spans):
-        parts.append(f"[0:v]trim=start={s.start:.3f}:end={s.end:.3f},setpts=PTS-STARTPTS[v{i}];")
-        parts.append(f"[0:a]atrim=start={s.start:.3f}:end={s.end:.3f},asetpts=PTS-STARTPTS[a{i}];")
-        labels.append(f"[v{i}][a{i}]")
-    parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[vout][aout]")
+        parts.append(f"[0:a]atrim=start={s.start:.4f}:end={s.end:.4f},asetpts=PTS-STARTPTS[a{i}];")
+        labels.append(f"[a{i}]")
+    parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=0:a=1[aout]")
     return "".join(parts)
 
 
