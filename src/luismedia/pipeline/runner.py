@@ -123,6 +123,53 @@ def stage_config(settings: Settings, stage: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+def sync_marker(wav: Path) -> Path:
+    """Arquivo ao lado do WAV dizendo que ele ja foi extraido alinhado com a imagem."""
+    return wav.with_name(wav.name + ".sync")
+
+
+def repair_av_offset(target: MediaInfo, out_dir: Path, name: str) -> float:
+    """Conserta resultados das versoes ate 1.5.0, que extraiam o audio sem o atraso inicial
+    (legendas adiantadas pelo mesmo tanto). Reextrai o WAV alinhado e empurra legendas,
+    cortes e transcricao. Roda uma vez por video; devolve o atraso corrigido (0 se nada)."""
+    from ..core.sync import shift_all
+
+    wav = out_dir / "audio" / f"{name}.wav"
+    marker = sync_marker(wav)
+    if marker.exists() or not wav.exists():
+        return 0.0
+    off = target.audio_offset
+    leg = out_dir / "legendas"
+    capp = leg / f"{name}.captions.json"
+    doc = CaptionDoc.load(capp) if capp.exists() else None
+    if off > 0.02:
+        media.extract_audio(target, wav)
+        if doc is not None and doc.av_offset is None:
+            dur = doc.duration or target.duration
+            doc.captions = shift_all(doc.captions, off)
+            doc.cuts = [c.model_copy(update={"start": min(c.start + off, dur - 0.06),
+                                             "end": min(c.end + off, dur)}) for c in doc.cuts
+                        if c.start + off < dur - 0.06]
+            trp = leg / f"{name}.transcript.json"
+            if trp.exists():
+                tr = Transcript.model_validate_json(trp.read_text(encoding="utf-8"))
+                tr.segments = shift_all(tr.segments, off)
+                trp.write_text(tr.model_dump_json(indent=2), encoding="utf-8")
+        envp = out_dir / "audio" / f"{name}.envelope.json"
+        if envp.exists():
+            try:
+                envp.write_text(json.dumps({"rate": 50, "rms": cleanup.read_envelope_wav(wav)}), encoding="utf-8")
+            except (ImportError, OSError, EOFError):
+                envp.unlink(missing_ok=True)
+    if doc is not None and doc.av_offset is None:
+        doc.av_offset = off
+        doc.save(capp)
+        if off > 0.02:
+            captions_edited(out_dir)  # legendas/videos ja gerados com o tempo antigo
+    marker.write_text(str(off), encoding="utf-8")
+    return off if off > 0.02 else 0.0
+
+
 def caption_rules(settings: Settings) -> SegmentationRules:
     """Regras de montagem das legendas (16:9) a partir das configuracoes, ja com o ritmo."""
     sub = settings.subtitles
@@ -363,9 +410,16 @@ class Pipeline:
             result.outputs["video_base"] = str(target.path)
 
             # 2. Audio ---------------------------------------------------------
-            if not step("audio", lambda: {"audio_bruto": str(
-                    media.extract_audio(target, dirs["audio"] / f"{name}.wav"))}, required=True):
+            def _audio() -> dict[str, str]:
+                wav = media.extract_audio(target, dirs["audio"] / f"{name}.wav")
+                sync_marker(wav).write_text(str(target.audio_offset), encoding="utf-8")
+                return {"audio_bruto": str(wav)}
+
+            if not step("audio", _audio, required=True):
                 return result
+            fixed = repair_av_offset(target, out, name)  # resultados de versoes antigas
+            if fixed:
+                log.info("atraso do audio corrigido", extra={"video": name, "offset_s": fixed})
 
             # 3. Transcricao + legenda editavel ------------------------------
             def _transcribe() -> dict[str, str]:
@@ -388,7 +442,7 @@ class Pipeline:
                     log.warning("sem envelope de audio", extra={"error": str(exc)})
                 doc = CaptionDoc(video=str(target.path), width=target.width or 1920,
                                  height=target.height or 1080, duration=target.duration, captions=caps,
-                                 pace=self.s.subtitles.pace)
+                                 pace=self.s.subtitles.pace, av_offset=target.audio_offset)
                 apply_to_doc(doc, self.s.subtitles.replacements)
                 return {"transcript": str(leg / f"{name}.transcript.json"),
                         "captions": str(doc.save(leg / f"{name}.captions.json")), **res}

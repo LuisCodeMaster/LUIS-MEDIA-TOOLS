@@ -27,6 +27,7 @@ class CaptionDoc(BaseModel):
     cuts: list[Cut] = []      # pausas e vicios sugeridos/aprovados (ver core.cleanup)
     pace: str = "padrao"      # ritmo usado para montar os blocos (core.sync)
     sync_offset: float = 0.0  # ajuste manual de sincronia ja aplicado (so informativo)
+    av_offset: float | None = None  # atraso do audio no arquivo ja considerado (None = versao antiga)
     captions: list[Segment]
 
     @classmethod

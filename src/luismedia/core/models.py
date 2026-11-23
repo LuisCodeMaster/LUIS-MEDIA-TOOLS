@@ -51,6 +51,7 @@ class MediaInfo(BaseModel):
     width: int | None = None
     height: int | None = None
     fps: float | None = None
+    audio_offset: float = 0.0  # o audio comeca X s depois do inicio do arquivo
 
 
 class SlideFrame(BaseModel):

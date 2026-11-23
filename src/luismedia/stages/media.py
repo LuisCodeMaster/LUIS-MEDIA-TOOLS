@@ -34,11 +34,16 @@ log = get_logger("stages.media")
 
 # --------------------------------------------------------------------------- audio
 def extract_audio(src: MediaInfo, out: Path, *, sample_rate: int = 16_000) -> Path:
-    """WAV mono 16 kHz: o formato que o Whisper espera."""
+    """WAV mono 16 kHz: o formato que o Whisper espera.
+
+    ``aresample=async=1:first_pts=0`` completa com silencio o inicio quando o audio comeca
+    depois da imagem dentro do arquivo. Sem isso o WAV "puxava" o audio para o segundo 0 e
+    todas as legendas saiam adiantadas pelo mesmo tanto (bug real em videos de celular/OBS).
+    """
     return ff.run_to_file(
         out,
         lambda tmp: ["-i", str(src.path), "-vn", "-ac", "1", "-ar", str(sample_rate),
-                     "-c:a", "pcm_s16le", str(tmp)],
+                     "-af", "aresample=async=1:first_pts=0", "-c:a", "pcm_s16le", str(tmp)],
         duration_hint=src.duration,
         timeout_s=max(120, src.duration * 2),
     )
