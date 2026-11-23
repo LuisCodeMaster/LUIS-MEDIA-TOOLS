@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1] - 2026-11-23
+
+### Corrigido
+- **Legendas adiantadas em vídeos cujo áudio começa depois da imagem** (comum em vídeos de
+  celular, OBS e exportados de editores): o áudio era extraído sem esse atraso inicial e todas as
+  legendas saíam adiantadas pelo mesmo tanto. Agora o áudio é extraído alinhado com a imagem.
+- Resultados de versões anteriores são consertados sozinhos (uma vez): ao abrir o vídeo em
+  Revisar e editar ou ao processar de novo, legendas, cortes e transcrição são empurrados pelo
+  atraso do arquivo, sem refazer a transcrição.
+
 ## [1.5.0] - 2026-11-23
 
 ### Novo

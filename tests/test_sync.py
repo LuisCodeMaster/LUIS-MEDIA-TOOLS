@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from luismedia.core.models import Segment, Word
@@ -93,3 +95,75 @@ def test_pipeline_snaps_whisper_early_start(tmp_path, lesson_video):
     doc = CaptionDoc.load(Path(r.outputs["captions"]))
     second = next(c for c in doc.captions if "Vamos" in c.text)
     assert 4.35 < second.start < 4.5 and doc.pace == "rapido"
+
+
+# ------------------------------------------------------------------ audio que comeca depois da imagem
+def _shifted_video(tmp_path, lesson_video, delay=0.7):
+    import subprocess
+
+    from luismedia.adapters import ffmpeg as ff
+
+    out = tmp_path / "atrasado.mp4"
+    subprocess.run([ff.find_binary("ffmpeg"), "-v", "error", "-y", "-i", str(lesson_video), "-itsoffset", str(delay),
+                    "-i", str(lesson_video), "-map", "0:v", "-map", "1:a", "-c", "copy", str(out)], check=True)
+    return out
+
+
+class EnergyWhisper:
+    """Whisper falso honesto: poe uma palavra onde o WAV realmente tem som."""
+
+    def transcribe(self, audio, duration, on_progress=None):
+        from luismedia.core.cleanup import read_envelope_wav
+        from luismedia.core.models import Transcript
+
+        env = read_envelope_wav(audio)
+        on = next(i for i, v in enumerate(env) if v > 0.05) / 50
+        w = W(on, 0.8, "Olá")
+        return Transcript(language="pt", duration=duration, model="f", device="cpu", segments=[seg([w])])
+
+
+def test_audio_delay_in_file_keeps_captions_in_sync(tmp_path, lesson_video):
+    pytest.importorskip("numpy")
+    from luismedia.adapters import ffmpeg as ff
+    from luismedia.core.captions import CaptionDoc
+    from luismedia.core.config import Settings
+    from luismedia.pipeline.runner import Pipeline
+
+    vid = _shifted_video(tmp_path, lesson_video, 0.7)
+    assert ff.probe(vid).audio_offset == pytest.approx(0.7, abs=0.06)
+    s = Settings(render={"encoder": "libx264", "hardsub": False}, llm={"enabled": False},
+                 slides={"enabled": False, "handout": False}, audio={"master": False}, cleanup={"enabled": False})
+    p = Pipeline(s)
+    p.whisper = EnergyWhisper()
+    [r] = p.run([vid], tmp_path / "out")
+    assert r.ok, r.error
+    doc = CaptionDoc.load(Path(r.outputs["captions"]))
+    assert doc.captions[0].start == pytest.approx(0.7, abs=0.08)  # a voz aparece em 0,7 s no video
+    assert doc.av_offset == pytest.approx(0.7, abs=0.06)
+
+
+def test_old_results_are_repaired_once(tmp_path, lesson_video):
+    pytest.importorskip("numpy")
+    import subprocess
+
+    from luismedia.adapters import ffmpeg as ff
+    from luismedia.core.captions import CaptionDoc
+    from luismedia.core.cleanup import Cut
+    from luismedia.pipeline.runner import repair_av_offset
+
+    vid = _shifted_video(tmp_path, lesson_video, 0.7)
+    out = tmp_path / "out" / "atrasado"
+    (out / "audio").mkdir(parents=True)
+    (out / "legendas").mkdir()
+    wav = out / "audio" / "atrasado.wav"  # do jeito antigo: sem o atraso
+    subprocess.run([ff.find_binary("ffmpeg"), "-v", "error", "-y", "-i", str(vid), "-vn", "-ac", "1", "-ar", "16000",
+                    "-c:a", "pcm_s16le", str(wav)], check=True)
+    capp = out / "legendas" / "atrasado.captions.json"
+    CaptionDoc(video=str(vid), width=320, height=240, duration=12,
+               captions=[seg([W(0.0, 0.8, "Olá")])], cuts=[Cut(start=3.0, end=4.4)]).save(capp)
+    info = ff.probe(vid)
+    assert repair_av_offset(info, out, "atrasado") == pytest.approx(0.7, abs=0.06)
+    doc = CaptionDoc.load(capp)
+    assert doc.captions[0].start == pytest.approx(0.7, abs=0.06) and doc.cuts[0].start == pytest.approx(3.7, abs=0.06)
+    assert repair_av_offset(info, out, "atrasado") == 0.0  # so uma vez
+    assert CaptionDoc.load(capp).captions[0].start == pytest.approx(doc.captions[0].start)

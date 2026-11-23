@@ -47,7 +47,7 @@ from ..core.cleanup import (
 from ..core.models import Segment
 from ..core.segmentation import cps
 from ..core.sync import PACE_LABELS, resegment, shift_all, snap_to_speech
-from ..pipeline.runner import caption_rules, captions_edited, find_reviews
+from ..pipeline.runner import caption_rules, captions_edited, find_reviews, repair_av_offset
 from . import state, theme
 from .tasks import run_task
 from .timeline import Timeline
@@ -525,6 +525,38 @@ class CaptionsPage(QWidget):
             self.table.selectRow(0)
         self._env_seq += 1
         seq, video = self._env_seq, self.doc.video
+        if self.doc.av_offset is None and Path(video).exists():  # resultado de versao antiga
+            run_task(lambda _p: self._repair(path, video),
+                     on_done=lambda off, seq=seq: self._repaired(off, seq),
+                     on_error=lambda _e, seq=seq: self._load_env(seq))
+        else:
+            self._load_env(seq)
+
+    @staticmethod
+    def _repair(doc_path: Path, video: str) -> float:
+        from ..adapters import ffmpeg as ff
+
+        name = doc_path.name.replace(".captions.json", "")
+        return repair_av_offset(ff.probe(Path(video)), doc_path.parent.parent, name)
+
+    def _repaired(self, off: float, seq: int) -> None:
+        if seq != self._env_seq or not self.doc_path:
+            return
+        if off > 0.02 and not self.dirty:
+            self.doc = CaptionDoc.load(self.doc_path)
+            self._undo.clear()
+            self._redo.clear()
+            self._refresh_all()
+            if self.table.rowCount():
+                self.table.selectRow(max(0, min(self._sel, self.table.rowCount() - 1)))
+            banner(self.msg, "ok", f"Sincronia corrigida: o áudio deste vídeo começa {off:.2f} s depois da "
+                                   "imagem e as legendas estavam adiantadas. Já ajustei tudo.".replace(".", ",", 1))
+        self._load_env(seq)
+
+    def _load_env(self, seq: int) -> None:
+        if seq != self._env_seq or not self.doc_path or not self.doc:
+            return
+        path, video = self.doc_path, self.doc.video
         run_task(lambda _p: load_envelope(path, video),
                  on_done=lambda res, seq=seq: self._env_ready(res, seq),
                  on_error=lambda _e: None)

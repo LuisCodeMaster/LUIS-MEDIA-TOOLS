@@ -248,10 +248,22 @@ def probe(path: Path, timeout_s: float = 60) -> MediaInfo:
         num, _, den = video["avg_frame_rate"].partition("/")
         fps = float(num) / float(den or 1) if float(den or 1) else None
 
+    def _start(d: dict | None) -> float:
+        try:
+            return float((d or {}).get("start_time") or 0)
+        except ValueError:
+            return 0.0
+
+    # quanto o audio comeca depois do inicio do arquivo (o FFmpeg conta o tempo a partir do
+    # stream que comeca primeiro). Comum em video de celular, OBS e exportado de editor.
+    file_start = _start(data.get("format"))
+    audio_offset = max(0.0, _start(audio) - file_start) if audio else 0.0
+
     return MediaInfo(
         path=path, duration=duration, has_audio=audio is not None, has_video=video is not None,
         width=video.get("width") if video else None,
         height=video.get("height") if video else None, fps=fps,
+        audio_offset=round(audio_offset, 4) if audio_offset < 60 else 0.0,
     )
 
 
