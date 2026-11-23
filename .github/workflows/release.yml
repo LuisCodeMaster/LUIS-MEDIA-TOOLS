@@ -7,11 +7,6 @@ name: Instalador Windows
 on:
   push:
     tags: ["v*"]
-  pull_request:
-    paths:
-      - "packaging/**"
-      - ".github/workflows/release.yml"
-      - "src/luismedia/gui/**"
   workflow_dispatch:
     inputs:
       publicar:

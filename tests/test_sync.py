@@ -167,3 +167,49 @@ def test_old_results_are_repaired_once(tmp_path, lesson_video):
     assert doc.captions[0].start == pytest.approx(0.7, abs=0.06) and doc.cuts[0].start == pytest.approx(3.7, abs=0.06)
     assert repair_av_offset(info, out, "atrasado") == 0.0  # so uma vez
     assert CaptionDoc.load(capp).captions[0].start == pytest.approx(doc.captions[0].start)
+
+
+# ------------------------------------------------------------------ detector de voz (musica de fundo)
+def _early_caps(spans, early):
+    """Legendas como o Whisper costuma dar: todas adiantadas `early` s."""
+    caps = []
+    for a, b in spans:
+        n = 3
+        d = (b - a) / n
+        ws = [W(a - early + i * d, d * 0.8, f"p{i}") for i in range(n)]
+        caps.append(seg(ws))
+    return caps
+
+
+@pytest.mark.parametrize("music", [0.0, 0.15])
+def test_voice_detector_fixes_early_captions_even_with_music(music):
+    pytest.importorskip("faster_whisper")
+    from luismedia.core.sync import estimate_bias, snap_to_regions, speech_regions
+
+    from .speechsynth import speech_audio
+
+    spans = [(1.0, 3.0), (4.5, 7.0), (9.2, 11.0)]
+    regions = speech_regions(speech_audio(spans, 12, music=music))
+    assert len(regions) >= 3
+    caps = _early_caps(spans, 0.35)
+    assert estimate_bias(caps, regions) == pytest.approx(0.35, abs=0.12)
+    fixed = snap_to_regions(caps, regions)
+    for (a, _), c in zip(spans, fixed, strict=True):
+        assert c.start == pytest.approx(a, abs=0.15)
+    # ja certas: nao mexe
+    again = snap_to_regions(fixed, regions)
+    assert all(abs(x.start - y.start) < 0.1 for x, y in zip(fixed, again, strict=True))
+
+
+def test_voice_sync_moves_word_cuts_but_not_manual_cuts():
+    from luismedia.core.captions import CaptionDoc
+    from luismedia.core.cleanup import Cut
+    from luismedia.core.sync import voice_sync
+
+    spans = [(1.0, 3.0), (4.5, 7.0), (9.2, 11.0)]
+    regions = [(1.0, 3.0), (4.5, 7.0), (9.2, 11.0)]
+    doc = CaptionDoc(video="v.mp4", width=1, height=1, duration=12, captions=_early_caps(spans, 0.3),
+                     cuts=[Cut(start=3.5, end=4.0), Cut(start=7.5, end=8.0, kind="manual")])
+    bias, moved = voice_sync(doc, regions)
+    assert bias == pytest.approx(0.3, abs=0.02) and moved == 3 and doc.voice_sync
+    assert doc.cuts[0].start == pytest.approx(3.8, abs=0.02) and doc.cuts[1].start == 7.5

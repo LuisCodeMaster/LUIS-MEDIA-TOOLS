@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.2] - 2026-11-23
+
+### Corrigido
+- **Legendas aparecendo antes da voz em vídeos com música ou ruído de fundo.** O encaixe agora
+  usa um detector de voz (Silero, o mesmo que o Whisper usa por dentro) em vez do volume: mede
+  quanto o Whisper está adiantado na aula toda, corrige todas as legendas e ainda empurra cada
+  começo de frase até onde a voz começa. Os cortes de pausas e vícios andam junto.
+- Vídeos já transcritos são corrigidos sozinhos ao abrir em **Revisar e editar** (com Ctrl+Z e
+  aviso na tela); o botão "Encaixar no início da fala" também usa o detector novo.
+
 ## [1.5.1] - 2026-11-23
 
 ### Corrigido

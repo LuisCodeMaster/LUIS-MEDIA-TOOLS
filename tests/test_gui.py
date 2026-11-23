@@ -339,8 +339,10 @@ def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video,
     assert ed.doc.captions[-1].start == pytest.approx(t0 + 0.1) and ed.offset_lbl.text() == "+0,10 s"
     ed.undo()
     assert ed.offset_lbl.text() == "+0,00 s"
-    ed.snap()  # ja encaixadas na transcricao
-    assert "já estão" in ed.msg.text()
+    ed.snap()  # ja encaixadas na transcricao (detector de voz roda em segundo plano)
+    assert pump(app, lambda: "Procurando" not in ed.msg.text(), 30)
+    assert "já estão" in ed.msg.text() or "encaixada" in ed.msg.text()
+    assert ed.doc.voice_sync
 
     ed.btn_approve.click()  # volta para o Inicio e gera o video final
     assert w.stack.currentWidget() is home

@@ -46,7 +46,7 @@ from ..core.cleanup import (
 )
 from ..core.models import Segment
 from ..core.segmentation import cps
-from ..core.sync import PACE_LABELS, resegment, shift_all, snap_to_speech
+from ..core.sync import PACE_LABELS, load_regions, resegment, shift_all, voice_sync
 from ..pipeline.runner import caption_rules, captions_edited, find_reviews, repair_av_offset
 from . import state, theme
 from .tasks import run_task
@@ -397,7 +397,8 @@ class CaptionsPage(QWidget):
         self.offset_lbl.setObjectName("timecode")
         lay.addWidget(row(QLabel("Sincronia"), self.btn_earlier, self.offset_lbl, self.btn_later))
         self.btn_snap = QPushButton("Encaixar no início da fala")
-        self.btn_snap.setToolTip("Corrige legendas que aparecem antes da voz, usando o volume do áudio")
+        self.btn_snap.setToolTip("Corrige legendas que aparecem antes da voz com um detector de voz "
+                                 "(funciona mesmo com música de fundo)")
         lay.addWidget(self.btn_snap)
         lay.addStretch(1)
         return w
@@ -564,6 +565,8 @@ class CaptionsPage(QWidget):
     def _env_ready(self, res: tuple[list[float], float], seq: int) -> None:
         if seq == self._env_seq:
             self.timeline.set_envelope(*res)
+            if self.doc and not self.doc.voice_sync:  # legenda de versao antiga: encaixa uma vez
+                self.snap(auto=True)
 
     def _duration(self) -> float:
         if not self.doc:
@@ -831,22 +834,47 @@ class CaptionsPage(QWidget):
         self.doc.sync_offset = round(self.doc.sync_offset + delta, 3)
         self._after_bulk_change()
 
-    def snap(self) -> None:
-        if not self.doc:
+    def _audio_dir(self) -> tuple[Path, str] | None:
+        if not self.doc_path:
+            return None
+        return self.doc_path.parent.parent / "audio", self.doc_path.name.replace(".captions.json", "")
+
+    def snap(self, auto: bool = False) -> None:
+        """Encaixa as legendas no inicio real da voz (detector de voz; volume se nao houver)."""
+        if not self.doc or not (where := self._audio_dir()):
+            return
+        audio_dir, name = where
+        path = self.doc_path
+        if not auto:
+            self.btn_snap.setEnabled(False)
+            banner(self.msg, "info", "Procurando o início de cada fala no áudio…")
+        run_task(lambda _p: load_regions(audio_dir, name),
+                 on_done=lambda regions, path=path, auto=auto: self._apply_snap(regions, path, auto),
+                 on_error=lambda e: (self.btn_snap.setEnabled(True),
+                                     banner(self.msg, "warn", f"Não consegui analisar o áudio: {e}")))
+
+    def _apply_snap(self, regions: list, path: Path, auto: bool) -> None:
+        self.btn_snap.setEnabled(True)
+        if not self.doc or path != self.doc_path or (auto and self.dirty):
             return
         env, rate = self._env()
-        if not env:
-            banner(self.msg, "warn", "A onda do áudio ainda está carregando. Tente de novo em instantes.")
+        before = self._snapshot()
+        bias, moved = voice_sync(self.doc, regions, env, rate)
+        if not moved and not bias:
+            if not auto:
+                banner(self.msg, "ok", "As legendas já estão no início da fala.")
+            if auto:  # nada a mudar: so marca para nao analisar de novo
+                self.doc.save(self.doc_path)
             return
-        new = snap_to_speech(self.doc.captions, env, rate)
-        moved = sum(1 for a, b in zip(self.doc.captions, new, strict=True) if abs(a.start - b.start) > 0.02)
-        if not moved:
-            banner(self.msg, "ok", "As legendas já estão no início da fala.")
-            return
-        self._checkpoint()
-        self.doc.captions = new
+        self._undo.append(before)
+        self._redo.clear()
+        self.dirty = True
+        self._sync_undo()
+        self._fill_cuts()
         self._after_bulk_change()
-        banner(self.msg, "ok", f"{moved} legenda(s) encaixada(s) no início da fala. Ctrl+Z desfaz.")
+        msg = (f"As legendas estavam {bias:.2f} s adiantadas em relação à voz; corrigi todas"
+               if bias > 0 else f"{moved} legenda(s) encaixada(s) no início da fala")
+        banner(self.msg, "ok", msg.replace(".", ",", 1) + ". Ctrl+Z desfaz; clique em Salvar para manter.")
 
     def _after_bulk_change(self) -> None:
         sel = max(0, self._sel)
