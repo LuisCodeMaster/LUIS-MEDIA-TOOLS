@@ -73,7 +73,10 @@ def test_speech_spans_without_silence_returns_whole_file():
 
 def test_autocut_filter_is_single_graph():
     g = autocut_filter([Span(start=0, end=1), Span(start=2, end=3)])
-    assert g.count("trim=") == 4 and g.endswith("concat=n=2:v=1:a=1[vout][aout]")
+    assert g.count("atrim=") == 2 and g.endswith("concat=n=2:v=0:a=1[aout]")
+    # video: um select so, com o tempo de cada quadro deslocado pelo que foi cortado antes
+    assert "select='not(between(t,1.0000,2.0000)+gte(t,3.0000))'" in g
+    assert "setpts='(T-(clip(T-1.0000,0,1.0000)))/TB'[vout]" in g
 
 
 # ---------------------------------------------------------------- config

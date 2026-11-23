@@ -105,7 +105,8 @@ def stage_config(settings: Settings, stage: str) -> str:
                                                                    "shorts_version", "pace", "snap_to_speech"}),
                         s.cleanup.enabled and s.cleanup.fillers],
         "limpeza": [s.cleanup.detection()],
-        "edicao": [s.render.crf, s.cleanup.enabled, s.cleanup.export_edl],
+        # "corte-v2": motor de corte sem deriva (1.5.3); refaz videos editados por versoes antigas
+        "edicao": [s.render.crf, s.cleanup.enabled, s.cleanup.export_edl, "corte-v2"],
         "masterizacao": [s.audio],
         "palavras-chave": [s.llm.model],
         "legendas": [s.subtitles.style_h, s.subtitles.shorts_version, s.subtitles.max_chars_shorts,
