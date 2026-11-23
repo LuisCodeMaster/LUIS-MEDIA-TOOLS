@@ -25,6 +25,8 @@ class CaptionDoc(BaseModel):
     keywords: list[str] = []  # palavras-chave em destaque (sugeridas pela IA, editaveis)
     duration: float = 0.0     # duracao do video (para os cortes do fim)
     cuts: list[Cut] = []      # pausas e vicios sugeridos/aprovados (ver core.cleanup)
+    pace: str = "padrao"      # ritmo usado para montar os blocos (core.sync)
+    sync_offset: float = 0.0  # ajuste manual de sincronia ja aplicado (so informativo)
     captions: list[Segment]
 
     @classmethod

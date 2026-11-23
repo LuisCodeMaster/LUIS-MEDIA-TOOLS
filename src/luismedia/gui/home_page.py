@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from ..adapters import ffmpeg as ff
 from ..cli import VIDEO_EXT
 from ..core.style import PRESETS_H
+from ..core.sync import PACE_LABELS
 from . import state
 from .process_page import STAGE_NAMES, STAGE_ORDER, DropFrame, ProcessPage, fmt_duration
 from .style_page import load_user_presets
@@ -155,6 +156,16 @@ class HomePage(QWidget):
         srow.addStretch(1)
         srow.addWidget(self.style_box)
         rl.addLayout(srow)
+        prow = QHBoxLayout()
+        self.pace_box = QComboBox()
+        self.pace_box.setMinimumWidth(260)
+        for key, label in PACE_LABELS.items():
+            self.pace_box.addItem(label, key)
+        self.pace_box.setToolTip("Rápido: troca junto com a fala (estilo redes). Devagar: mais tempo para ler.")
+        prow.addWidget(QLabel("Ritmo da legenda"))
+        prow.addStretch(1)
+        prow.addWidget(self.pace_box)
+        rl.addLayout(prow)
         self.o_clean = toggle("Cortar pausas e vícios (é…, ãh, hum)",
                               "Encurta silêncios e tira hesitações. Você confere tudo antes, se a revisão estiver ligada.")
         self.o_review = toggle("Revisar antes de gerar o vídeo",
@@ -260,6 +271,7 @@ class HomePage(QWidget):
         ui = state.load_ui()
         self.o_clean.setChecked(ui.get("home_clean", s.cleanup.enabled))
         self.o_review.setChecked(ui.get("home_review", True))
+        self.pace_box.setCurrentIndex(max(0, self.pace_box.findData(ui.get("home_pace", s.subtitles.pace))))
         if ui.get("home_style") and self.style_box.findText(ui["home_style"]) >= 0:
             self.style_box.setCurrentText(ui["home_style"])
         self.v_name.setText(self.video.name)
@@ -292,7 +304,8 @@ class HomePage(QWidget):
         clean = self.o_clean.isChecked()
         ov: dict = {"cleanup": {"enabled": clean, "pauses": clean, "fillers": clean},
                     "autocut": {"enabled": False},
-                    "subtitles": {"review": self.o_review.isChecked()}}
+                    "subtitles": {"review": self.o_review.isChecked(),
+                                  "pace": self.pace_box.currentData() or "padrao"}}
         name = self.style_box.currentText()
         ov["render"] = {"hardsub": name != NO_SUBS}
         style = PRESETS_H.get(name) or load_user_presets()["h"].get(name.removeprefix("★ "))
@@ -315,7 +328,7 @@ class HomePage(QWidget):
             return
         ui = state.load_ui()
         ui.update({"home_clean": self.o_clean.isChecked(), "home_review": self.o_review.isChecked(),
-                   "home_style": self.style_box.currentText()})
+                   "home_style": self.style_box.currentText(), "home_pace": self.pace_box.currentData()})
         state.save_ui(ui)
         if not self.process.out_edit.text().strip():
             self.process.out_edit.setText(str(self._out_root()))

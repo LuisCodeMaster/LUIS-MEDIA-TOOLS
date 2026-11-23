@@ -45,6 +45,7 @@ from ..core.logging import get_logger
 from ..core.models import MediaInfo, SlideFrame, Transcript, Word
 from ..core.segmentation import SegmentationRules, segment_transcript, segment_words
 from ..core.style import emoji_plan, write_styled_ass
+from ..core.sync import rules_for_pace, snap_to_speech
 from ..stages import ai, editorial, media
 
 log = get_logger("pipeline")
@@ -101,7 +102,7 @@ def stage_config(settings: Settings, stage: str) -> str:
         "autocut": [s.autocut, s.render.crf],
         "audio": [],
         "transcricao": [s.whisper, s.subtitles.model_dump(exclude={"style_h", "style_v", "review",
-                                                                   "shorts_version"}),
+                                                                   "shorts_version", "pace", "snap_to_speech"}),
                         s.cleanup.enabled and s.cleanup.fillers],
         "limpeza": [s.cleanup.detection()],
         "edicao": [s.render.crf, s.cleanup.enabled, s.cleanup.export_edl],
@@ -119,6 +120,16 @@ def stage_config(settings: Settings, stage: str) -> str:
     raw = json.dumps([p.model_dump(mode="json") if hasattr(p, "model_dump") else p for p in parts],
                      sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def caption_rules(settings: Settings) -> SegmentationRules:
+    """Regras de montagem das legendas (16:9) a partir das configuracoes, ja com o ritmo."""
+    sub = settings.subtitles
+    return rules_for_pace(SegmentationRules(
+        max_chars_line=sub.max_chars_line, max_chars_shorts=sub.max_chars_shorts,
+        min_duration=sub.min_duration_s, max_duration=sub.max_duration_s,
+        gap=sub.min_gap_s, max_cps=sub.max_cps, max_words=sub.style_h.max_words,
+    ), sub.pace)
 
 
 class Manifest:
@@ -181,11 +192,7 @@ class Pipeline:
         self.llm = OllamaClient(settings.llm)
         self._llm_problem: str | None | Literal["unchecked"] = "unchecked"
         sub = settings.subtitles
-        self.rules = SegmentationRules(
-            max_chars_line=sub.max_chars_line, max_chars_shorts=sub.max_chars_shorts,
-            min_duration=sub.min_duration_s, max_duration=sub.max_duration_s,
-            gap=sub.min_gap_s, max_cps=sub.max_cps, max_words=sub.style_h.max_words,
-        )
+        self.rules = caption_rules(settings)
         self.rules_v = replace(self.rules, max_words=sub.style_v.max_words, max_duration=min(sub.max_duration_s, 3.0))
         self._pos = (0, 0)
 
@@ -368,11 +375,22 @@ class Pipeline:
                 leg = dirs["legendas"]
                 (leg / f"{name}.transcript.json").write_text(tr.model_dump_json(indent=2), encoding="utf-8")
                 caps = segment_transcript(tr.segments, self.rules)
+                res: dict[str, str] = {}
+                try:  # volume do audio: encaixe na voz, checagem de pausas e onda da linha do tempo
+                    env = cleanup.read_envelope_wav(Path(result.outputs["audio_bruto"]))
+                    envp = dirs["audio"] / f"{name}.envelope.json"
+                    envp.write_text(json.dumps({"rate": 50, "rms": env}), encoding="utf-8")
+                    res["envelope"] = str(envp)
+                    if self.s.subtitles.snap_to_speech:
+                        caps = snap_to_speech(caps, env)
+                except (ImportError, OSError, EOFError) as exc:
+                    log.warning("sem envelope de audio", extra={"error": str(exc)})
                 doc = CaptionDoc(video=str(target.path), width=target.width or 1920,
-                                 height=target.height or 1080, duration=target.duration, captions=caps)
+                                 height=target.height or 1080, duration=target.duration, captions=caps,
+                                 pace=self.s.subtitles.pace)
                 apply_to_doc(doc, self.s.subtitles.replacements)
                 return {"transcript": str(leg / f"{name}.transcript.json"),
-                        "captions": str(doc.save(leg / f"{name}.captions.json"))}
+                        "captions": str(doc.save(leg / f"{name}.captions.json")), **res}
 
             if not step("transcricao", _transcribe, required=True):
                 return result
@@ -384,9 +402,12 @@ class Pipeline:
                     env: list[float] | None = None
                     envp = dirs["audio"] / f"{name}.envelope.json"
                     try:
-                        env = cleanup.read_envelope_wav(Path(result.outputs["audio_bruto"]))
-                        envp.write_text(json.dumps({"rate": 50, "rms": env}), encoding="utf-8")
-                    except (ImportError, OSError, EOFError) as exc:
+                        if envp.exists():
+                            env = json.loads(envp.read_text(encoding="utf-8"))["rms"]
+                        else:
+                            env = cleanup.read_envelope_wav(Path(result.outputs["audio_bruto"]))
+                            envp.write_text(json.dumps({"rate": 50, "rms": env}), encoding="utf-8")
+                    except (ImportError, OSError, EOFError, ValueError, KeyError) as exc:
                         log.warning("sem envelope de audio", extra={"error": str(exc)})
                     d = CaptionDoc.load(captions_path)
                     found = cleanup.detect_cuts(d.captions, target.duration, self.s.cleanup.detection(), env)

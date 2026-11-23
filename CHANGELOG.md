@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.1] - 2026-11-22
+
+### Corrigido
+- **Legenda adiantada em relação à fala:** o Whisper costuma marcar o início da frase alguns
+  décimos antes da voz. Agora o início de cada legenda (e das palavras do destaque) é encaixado
+  onde o volume do áudio realmente sobe.
+
+### Novo
+- **Ritmo da legenda:** Rápido (blocos curtos que trocam junto com a fala), Padrão ou Devagar
+  (mais tempo para ler). Na tela Início, em Processar em lote e na revisão, onde refaz as
+  legendas do vídeo aberto mantendo as correções de texto.
+- **Sincronia manual** na revisão (−0,1 s / +0,1 s em todas as legendas) e botão
+  "Encaixar no início da fala" para vídeos já processados. Tudo com Ctrl+Z.
+
 ## [1.4.0] - 2026-11-22
 
 ### Novo: editar sem precisar de outro programa
