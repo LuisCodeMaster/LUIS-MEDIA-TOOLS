@@ -1,9 +1,10 @@
 name: CI
 
+# Economia de minutos do GitHub Actions (repositorio privado: Windows conta 2x, macOS 10x).
+# Roda nos PRs (nao de novo no merge) e sob demanda; macOS fica de fora (o app e para Windows).
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   testes:
@@ -12,8 +13,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ["3.11", "3.12"]
+        include:
+          - {os: ubuntu-latest, python: "3.11"}
+          - {os: ubuntu-latest, python: "3.12"}
+          - {os: windows-latest, python: "3.12"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,6 +43,7 @@ jobs:
   powershell:
     name: Sintaxe dos scripts PowerShell
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.title, 'ps1')
     steps:
       - uses: actions/checkout@v4
       - name: Analisar todos os .ps1 (Windows PowerShell 5.1)
