@@ -36,7 +36,14 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.captions import CaptionDoc, apply_replacements, realign_words, rebalance
-from ..core.cleanup import Cut, envelope_from_pcm, read_envelope_wav, removed_seconds
+from ..core.cleanup import (
+    USER_KINDS,
+    Cut,
+    detect_retakes,
+    envelope_from_pcm,
+    read_envelope_wav,
+    removed_seconds,
+)
 from ..core.models import Segment
 from ..core.segmentation import cps
 from ..core.sync import PACE_LABELS, resegment, shift_all, snap_to_speech
@@ -44,6 +51,7 @@ from ..pipeline.runner import caption_rules, captions_edited, find_reviews
 from . import state, theme
 from .tasks import run_task
 from .timeline import Timeline
+from .transcript_editor import TranscriptEditor
 from .widgets import Card, banner, hint, row
 
 try:  # o player e opcional: sem QtMultimedia o editor funciona sem video
@@ -258,7 +266,28 @@ class CaptionsPage(QWidget):
         for c, w in ((COL_START, 80), (COL_END, 80), (COL_CPS, 64)):
             hh.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(c, w)
-        ml.addWidget(self.table, 2)
+        self.center = QTabWidget()
+        tw = QWidget()
+        tl_ = QVBoxLayout(tw)
+        tl_.setContentsMargins(0, 8, 0, 0)
+        tl_.setSpacing(8)
+        tbar = QHBoxLayout()
+        self.btn_text_delete = QPushButton("✂ Apagar do vídeo")
+        self.btn_text_delete.setToolTip("Selecione palavras no texto e apague (Delete): o trecho sai do vídeo")
+        self.btn_text_restore = QPushButton("↺ Restaurar")
+        self.btn_text_restore.setToolTip("Selecione um texto riscado para trazê-lo de volta ao vídeo")
+        info = hint("Clique numa palavra para ir até ela. Selecione e aperte Delete para tirar do vídeo. "
+                    "Riscado = sai do vídeo.")
+        info.setWordWrap(True)
+        tbar.addWidget(info, 1)
+        tbar.addWidget(self.btn_text_restore)
+        tbar.addWidget(self.btn_text_delete)
+        tl_.addLayout(tbar)
+        self.transcript = TranscriptEditor()
+        tl_.addWidget(self.transcript, 1)
+        self.center.addTab(tw, "Editar pelo texto")
+        self.center.addTab(self.table, "Legendas")
+        ml.addWidget(self.center, 2)
         split.addWidget(mid)
 
         # ---- painel da direita (abas)
@@ -299,6 +328,12 @@ class CaptionsPage(QWidget):
         self.btn_earlier.clicked.connect(lambda _c=False: self.shift(-0.1))
         self.btn_later.clicked.connect(lambda _c=False: self.shift(0.1))
         self.btn_snap.clicked.connect(lambda _c=False: self.snap())
+        self.btn_retakes.clicked.connect(lambda _c=False: self.find_retakes())
+        self.transcript.seek_requested.connect(self.seek)
+        self.transcript.delete_requested.connect(self.delete_words)
+        self.transcript.restore_requested.connect(self.restore_words)
+        self.btn_text_delete.clicked.connect(lambda _c=False: self._text_action(self.delete_words))
+        self.btn_text_restore.clicked.connect(lambda _c=False: self._text_action(self.restore_words))
         self.timeline.seek_requested.connect(self.seek)
         self.timeline.caption_selected.connect(lambda i: self.table.selectRow(i))
         self.timeline.caption_edit_started.connect(lambda _i: self._begin_pending())
@@ -377,14 +412,16 @@ class CaptionsPage(QWidget):
         self.cuts_info.setObjectName("cardTitle")
         self.cuts_list = QListWidget()
         self.cuts_list.setObjectName("cutsList")
+        self.btn_retakes = QPushButton("Procurar regravações")
+        self.btn_retakes.setToolTip("Acha frases que você começou e repetiu, e marca a primeira tentativa para corte")
         self.btn_all_on = QPushButton("Marcar todos")
         self.btn_all_off = QPushButton("Desmarcar todos")
-        self.btn_cut_remove = QPushButton("Remover corte manual")
+        self.btn_cut_remove = QPushButton("Remover corte")
         self.btn_cut_remove.setEnabled(False)
         lay.addWidget(self.cuts_info)
         lay.addWidget(row(self.btn_all_on, self.btn_all_off))
         lay.addWidget(self.cuts_list, 1)
-        lay.addWidget(self.btn_cut_remove)
+        lay.addWidget(row(self.btn_retakes, self.btn_cut_remove))
         lay.addWidget(hint("Marcado = sai do vídeo. Pausas com som de fundo e vícios duvidosos "
                            "(“né”, “tipo”) vêm desmarcados para você decidir."))
         return w
@@ -419,7 +456,8 @@ class CaptionsPage(QWidget):
         for w in (self.btn_apply, self.btn_balance, self.btn_merge, self.btn_delete, self.btn_replace,
                   self.btn_save, self.btn_approve, self.text, self.start, self.end, self.keywords,
                   self.btn_all_on, self.btn_all_off, self.btn_play, self.timeline, self.pace,
-                  self.btn_earlier, self.btn_later, self.btn_snap):
+                  self.btn_earlier, self.btn_later, self.btn_snap, self.btn_retakes, self.btn_text_delete,
+                  self.btn_text_restore, self.transcript):
             w.setEnabled(on)
         self._sync_undo()
 
@@ -513,6 +551,8 @@ class CaptionsPage(QWidget):
         if self.doc:
             self.timeline.set_data(self._duration(), self.doc.captions, self.doc.cuts)
             self.timeline.set_selected(self._sel)
+            self.transcript.set_content(self.doc.captions, self.doc.cuts)
+            self.transcript.set_playhead(self.timeline.playhead)
         self._update_cut_summary()
 
     def _fill_table(self) -> None:
@@ -809,7 +849,7 @@ class CaptionsPage(QWidget):
             self.btn_cut_remove.setEnabled(False)
             return
         c = self.doc.cuts[k]
-        self.btn_cut_remove.setEnabled(c.kind == "manual")
+        self.btn_cut_remove.setEnabled(c.kind in USER_KINDS)
         self.seek(max(0.0, c.start - 1.0))
         self.timeline.set_selected(-1)
 
@@ -837,12 +877,96 @@ class CaptionsPage(QWidget):
 
     def _remove_cut(self) -> None:
         k = self.cuts_list.currentRow()
-        if not self.doc or not (0 <= k < len(self.doc.cuts)) or self.doc.cuts[k].kind != "manual":
+        if not self.doc or not (0 <= k < len(self.doc.cuts)) or self.doc.cuts[k].kind not in USER_KINDS:
             return
         self._checkpoint()
         del self.doc.cuts[k]
         self._fill_cuts()
         self._refresh_timeline()
+
+    # ------------------------------------------------------------------ editar pelo texto
+    def _text_action(self, fn) -> None:
+        r = self.transcript.selected_words()
+        if r:
+            fn(*r)
+        else:
+            banner(self.msg, "info", "Selecione algumas palavras no texto primeiro.")
+
+    def delete_words(self, i0: int, i1: int) -> None:
+        """Apaga do video as palavras i0..i1 (com o respiro em volta, sem engolir demonstracoes)."""
+        words = self.transcript.words
+        if not self.doc or not (0 <= i0 <= i1 < len(words)):
+            return
+        s, e = self._word_bounds(i0, i1)
+        text = " ".join(w.text.strip() for w in words[i0:i1 + 1])
+        if len(text) > 44:
+            text = text[:42].rstrip() + "…"
+        self._checkpoint()
+        self.doc.cuts = sorted([*self.doc.cuts, Cut(start=max(0.0, s), end=max(s + 0.05, e), kind="texto",
+                                                     label=f"“{text}”")], key=lambda c: (c.start, c.end))
+        self._fill_cuts()
+        self._refresh_timeline()
+        banner(self.msg, "ok", f"Apagado do vídeo: “{text}” (−{max(0.0, e - s):.1f} s). Ctrl+Z desfaz.")
+
+    def _word_bounds(self, i0: int, i1: int) -> tuple[float, float]:
+        """Trecho das palavras i0..i1 com metade da pausa de cada lado (no maximo 0,3 s)."""
+        words = self.transcript.words
+        w0, w1 = words[i0], words[i1]
+        s = w0.start - 0.05
+        if i0 > 0:
+            s = max((words[i0 - 1].end + w0.start) / 2, w0.start - 0.3)
+        e = w1.end + 0.05
+        if i1 + 1 < len(words):
+            e = min((w1.end + words[i1 + 1].start) / 2, w1.end + 0.3)
+        return max(0.0, s), e
+
+    def restore_words(self, i0: int, i1: int) -> None:
+        """Traz de volta o trecho: corta os cortes do usuario e desliga os automaticos ali."""
+        words = self.transcript.words
+        if not self.doc or not (0 <= i0 <= i1 < len(words)):
+            return
+        t0, t1 = self._word_bounds(i0, i1)
+        a, b = words[i0].start, words[i1].end  # cortes automaticos: so os que pegam as palavras
+        hit = [c for c in self.doc.cuts if c.enabled and (
+            (c.kind in USER_KINDS and c.start < t1 and c.end > t0) or (c.start < b and c.end > a))]
+        if not hit:
+            banner(self.msg, "info", "Esse trecho já está no vídeo.")
+            return
+        self._checkpoint()
+        out: list[Cut] = []
+        for c in self.doc.cuts:
+            if c not in hit:
+                out.append(c)
+            elif c.kind in USER_KINDS:  # recorta: mantem so o que esta fora da selecao
+                if t0 - c.start > 0.08:
+                    out.append(c.model_copy(update={"end": t0 - 0.02}))
+                if c.end - t1 > 0.08:
+                    out.append(c.model_copy(update={"start": t1 + 0.02}))
+            else:
+                out.append(c.model_copy(update={"enabled": False}))
+        self.doc.cuts = sorted(out, key=lambda c: (c.start, c.end))
+        self._fill_cuts()
+        self._refresh_timeline()
+        banner(self.msg, "ok", "Trecho restaurado. Ctrl+Z desfaz.")
+
+    def find_retakes(self) -> None:
+        if not self.doc:
+            return
+        found = detect_retakes(self.doc.captions)
+        old = [c for c in self.doc.cuts if c.kind == "repeticao"]
+        if not found and not old:
+            banner(self.msg, "ok", "Nenhuma frase recomeçada encontrada.")
+            return
+        self._checkpoint()
+        keep_state = {(round(c.start, 2), round(c.end, 2)): c.enabled for c in old}
+        found = [c.model_copy(update={"enabled": keep_state.get((round(c.start, 2), round(c.end, 2)), c.enabled)})
+                 for c in found]
+        self.doc.cuts = sorted([*(c for c in self.doc.cuts if c.kind != "repeticao"), *found],
+                               key=lambda c: (c.start, c.end))
+        self._fill_cuts()
+        self._refresh_timeline()
+        on = sum(c.enabled for c in found)
+        banner(self.msg, "ok", f"{len(found)} regravação(ões) encontrada(s); {on} marcada(s) para corte.")
 
     # ------------------------------------------------------------------ salvar
     def keyword_list(self) -> list[str]:
@@ -915,6 +1039,7 @@ class CaptionsPage(QWidget):
         else:
             self._show_time(t)
         self.timeline.set_playhead(t)
+        self.transcript.set_playhead(t)
 
     def _playing(self) -> bool:
         return self.player is not None and \
@@ -946,6 +1071,7 @@ class CaptionsPage(QWidget):
                     return
         self._show_time(t)
         self.timeline.set_playhead(t, follow=self._playing())
+        self.transcript.set_playhead(t, follow=self._playing())
 
     def keyPressEvent(self, e) -> None:  # noqa: N802
         fw = self.focusWidget()

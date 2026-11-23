@@ -21,6 +21,7 @@ from ..core.models import (
     MediaInfo,
     Quiz,
     Segment,
+    TipList,
     Transcript,
 )
 from ..core.segmentation import SegmentationRules, segment_words
@@ -59,6 +60,17 @@ def summary(client: OllamaClient, material: str, title: str) -> str:
               "## Objetivo da aula\n## Pontos-chave\n## Conclusao pratica\n\n"
               f"Conteudo:\n{material}")
     return client.generate(prompt, system=SYSTEM).strip()
+
+
+def teacher_tips(client: OllamaClient, stats: str, text: str, max_chars: int) -> list[str]:
+    """3 a 5 dicas concretas para o professor gravar melhor a proxima aula."""
+    prompt = ("Voce e um coach de didatica e oratoria para professores que gravam aulas em video. "
+              "Com base nos indicadores e no trecho da transcricao abaixo, escreva de 3 a 5 dicas "
+              "curtas, concretas e gentis (uma frase cada, em portugues do Brasil) para a proxima "
+              "gravacao. Cite exemplos do proprio texto quando ajudar. Nao repita os numeros.\n\n"
+              f"INDICADORES:\n{stats}\n\nTRANSCRICAO:\n{text[:max_chars]}")
+    tips = [t.strip() for t in client.generate_model(prompt, TipList).tips if t.strip()]
+    return [t if len(t) <= 400 else t[:397] + "..." for t in tips][:5]
 
 
 def keywords(client: OllamaClient, text: str, max_chars: int, n: int = 15) -> list[str]:

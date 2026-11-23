@@ -76,6 +76,12 @@ class ClipPlan(BaseModel):
     clips: list[ClipSuggestion]
 
 
+class TipList(BaseModel):
+    """Dicas da IA para o professor (relatorio da aula)."""
+
+    tips: list[str] = Field(min_length=1, max_length=6)
+
+
 class KeywordList(BaseModel):
     """Palavras-chave escolhidas pela IA para destacar nas legendas."""
 

@@ -40,11 +40,12 @@ from .tasks import PipelineJob, run_task, start_job
 from .widgets import Card, banner, hint, page_header, row, toggle
 
 STAGE_ORDER = ["validacao", "autocut", "audio", "transcricao", "limpeza", "masterizacao", "ia", "resumo", "quiz",
-               "palavras-chave", "edicao", "legendas", "hardsub", "cortes", "slides", "apostila"]
+               "palavras-chave", "edicao", "relatorio", "legendas", "hardsub", "cortes", "slides", "apostila"]
 STAGE_NAMES = {
     "validacao": "Validando", "autocut": "Cortando pausas", "audio": "Extraindo áudio",
     "limpeza": "Achando pausas e vícios", "edicao": "Aplicando os cortes", "legendas": "Gerando legendas",
     "palavras-chave": "Escolhendo palavras-chave", "revisao": "Aguardando revisão",
+    "relatorio": "Montando o relatório da aula",
     "transcricao": "Transcrevendo", "masterizacao": "Masterizando voz", "hardsub": "Queimando legenda",
     "ia": "IA local", "resumo": "Gerando resumo", "quiz": "Gerando quiz", "cortes": "Gerando cortes 9:16",
     "slides": "Detectando slides", "apostila": "Montando apostila",
@@ -224,6 +225,7 @@ class ProcessPage(QWidget):
         cut = Card("Corte e voz")
         self.o_autocut = toggle("Cortar pausas", "Encurta os silêncios entre as falas (revisável na linha do tempo)")
         self.o_fillers = toggle("Cortar vícios (é…, ãh, hum)", "Também sugere “né” e “tipo”, desmarcados")
+        self.o_retakes = toggle("Tirar regravações", "Frase começada e repetida: fica só a última tentativa")
         self.o_pause = QDoubleSpinBox()
         self.o_pause.setRange(1.0, 60.0)
         self.o_pause.setSingleStep(0.5)
@@ -234,6 +236,7 @@ class ProcessPage(QWidget):
         self.o_master = toggle("Masterizar voz (-14 LUFS)", "Equalização e volume no padrão do YouTube")
         cut.body.addWidget(self.o_autocut)
         cut.body.addWidget(self.o_fillers)
+        cut.body.addWidget(self.o_retakes)
         cut.body.addWidget(row(QLabel("Manter pausas maiores que"), self.o_pause))
         cut.body.addWidget(self.o_edl)
         cut.body.addWidget(self.o_master)
@@ -274,7 +277,8 @@ class ProcessPage(QWidget):
         self.o_slides = toggle("Detectar slides do vídeo")
         self.o_handout = toggle("Apostila ilustrada (HTML)")
         self.o_pdf = toggle("Apostila em PDF")
-        for w in (self.o_slides, self.o_handout, self.o_pdf):
+        self.o_report = toggle("Relatório do professor", "Ritmo, vícios, regravações e dicas para a próxima gravação")
+        for w in (self.o_slides, self.o_handout, self.o_pdf, self.o_report):
             mat.body.addWidget(w)
         ol.addWidget(mat)
 
@@ -319,13 +323,14 @@ class ProcessPage(QWidget):
             sig.connect(self._on_option_changed)
         self.o_autocut.toggled.connect(self._sync_enabled)
         self.o_fillers.toggled.connect(self._sync_enabled)
+        self.o_retakes.toggled.connect(self._sync_enabled)
         self.o_slides.toggled.connect(self._sync_enabled)
         self.o_handout.toggled.connect(self._sync_enabled)
         self.o_clips.toggled.connect(self._sync_enabled)
         self._refresh_queue()
 
     def _option_widgets(self) -> list[QWidget]:
-        return [self.o_pace, self.o_autocut, self.o_fillers, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
+        return [self.o_pace, self.o_autocut, self.o_fillers, self.o_retakes, self.o_report, self.o_pause, self.o_edl, self.o_master, self.o_hardsub, self.o_shorts,
                 self.o_encoder, self.o_slides, self.o_handout, self.o_pdf, self.o_summary, self.o_quiz,
                 self.o_clips, self.o_clips_n]
 
@@ -335,10 +340,12 @@ class ProcessPage(QWidget):
         clips = self.o_clips.isChecked()
         return {
             "autocut": {"enabled": False},
-            "cleanup": {"enabled": self.o_autocut.isChecked() or self.o_fillers.isChecked(),
+            "cleanup": {"enabled": any(x.isChecked() for x in (self.o_autocut, self.o_fillers, self.o_retakes)),
                         "pauses": self.o_autocut.isChecked(), "fillers": self.o_fillers.isChecked(),
+                        "retakes": self.o_retakes.isChecked(),
                         "export_edl": self.o_edl.isChecked(), "max_pause_s": self.o_pause.value()},
             "audio": {"master": self.o_master.isChecked()},
+            "output": {"teacher_report": self.o_report.isChecked()},
             "render": {"hardsub": self.o_hardsub.isChecked(), "encoder": ENCODERS[self.o_encoder.currentIndex()][1]},
             "subtitles": {"shorts_version": self.o_shorts.isChecked(), "review": self.o_review.isChecked(),
                           "pace": self.o_pace.currentData() or "padrao"},
@@ -355,6 +362,8 @@ class ProcessPage(QWidget):
         try:
             self.o_autocut.setChecked(s.cleanup.enabled and s.cleanup.pauses)
             self.o_fillers.setChecked(s.cleanup.enabled and s.cleanup.fillers)
+            self.o_retakes.setChecked(s.cleanup.enabled and s.cleanup.retakes)
+            self.o_report.setChecked(s.output.teacher_report)
             self.o_pause.setValue(s.cleanup.max_pause_s)
             self.o_edl.setChecked(s.cleanup.export_edl)
             self.o_master.setChecked(s.audio.master)
@@ -394,7 +403,7 @@ class ProcessPage(QWidget):
 
     def _sync_enabled(self, *_) -> None:
         self.o_pause.setEnabled(self.o_autocut.isChecked())
-        self.o_edl.setEnabled(self.o_autocut.isChecked() or self.o_fillers.isChecked())
+        self.o_edl.setEnabled(any(x.isChecked() for x in (self.o_autocut, self.o_fillers, self.o_retakes)))
         self.o_pdf.setEnabled(self.o_handout.isChecked())
         self.o_clips_n.setEnabled(self.o_clips.isChecked())
 

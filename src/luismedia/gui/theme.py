@@ -143,5 +143,7 @@ QPushButton#hero {{ background: {ACCENT_STRONG}; border: none; color: white; fon
                    padding: 11px 26px; border-radius: 10px; }}
 QPushButton#hero:hover {{ background: {ACCENT}; }}
 QPushButton#hero:disabled {{ background: {SURFACE_2}; color: #5d6478; }}
+QTextEdit#transcript {{ background: {SURFACE}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 10px;
+                       padding: 14px 16px; selection-background-color: #3b3f8f; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
 """

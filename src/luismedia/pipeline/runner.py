@@ -37,7 +37,7 @@ from ..adapters import ffmpeg as ff
 from ..adapters import pdf
 from ..adapters.ollama import OllamaClient
 from ..adapters.whisper import WhisperEngine
-from ..core import cleanup, subtitles
+from ..core import cleanup, report, subtitles
 from ..core.captions import CaptionDoc, apply_to_doc, realign_words
 from ..core.config import Settings
 from ..core.errors import Cancelled, LuisMediaError
@@ -87,7 +87,7 @@ DEPENDS: dict[str, list[str]] = {
     "palavras-chave": ["transcricao"], "limpeza": ["transcricao"], "edicao": ["limpeza"],
     "legendas": ["transcricao", "palavras-chave", "edicao"], "hardsub": ["legendas"], "resumo": ["transcricao"],
     "quiz": ["transcricao"], "cortes": ["legendas"], "slides": ["autocut", "edicao"],
-    "apostila": ["slides", "legendas", "resumo"],
+    "apostila": ["slides", "legendas", "resumo"], "relatorio": ["edicao"],
 }
 # Etapas que dependem do texto das legendas (refeitas quando o usuario edita no app)
 # (os cortes de pausas/vicios ficam no mesmo arquivo, entao a edicao do video tambem e refeita)
@@ -116,6 +116,7 @@ def stage_config(settings: Settings, stage: str) -> str:
         "cortes": [s.llm.model, s.llm.clips_count, s.subtitles.style_v, s.render.crf],
         "slides": [s.slides.scene_threshold],
         "apostila": [s.slides.handout_pdf],
+        "relatorio": [s.llm.enabled, s.llm.model, s.subtitles.max_cps],
     }.get(stage, [])
     raw = json.dumps([p.model_dump(mode="json") if hasattr(p, "model_dump") else p for p in parts],
                      sort_keys=True, default=str)
@@ -472,6 +473,7 @@ class Pipeline:
                                                              target.path.name, target.fps or 30))
                 return res
 
+            original = target
             if not step("edicao", _edit, required=True):
                 return result
             if "video_editado" in result.outputs:
@@ -479,6 +481,33 @@ class Pipeline:
                 result.duration = target.duration
                 result.outputs["video_base"] = str(target.path)
             time_map = cleanup.TimeMap(self._active_cuts(CaptionDoc.load(captions_path)))
+
+            # 7b. Relatorio do professor (ritmo, vicios, regravacoes, dicas) ---------------
+            if self.s.output.teacher_report:
+                def _report() -> dict[str, str]:
+                    d = CaptionDoc.load(captions_path)
+                    cuts = [c for c in d.cuts if self.s.cleanup.enabled or c.kind in cleanup.USER_KINDS]
+                    r = report.build_report(d.captions, cuts, d.duration or original.duration,
+                                            self.s.subtitles.max_cps)
+                    tips = report.auto_tips(r)
+                    if llm_ok:
+                        stats = json.dumps({k: r[k] for k in ("wpm", "fillers", "crutches", "retakes", "questions",
+                                                              "longest_run", "fast", "scores")},
+                                           ensure_ascii=False, default=str)[:3000]
+                        text = " ".join(c.text.replace("\n", " ") for c in d.captions)
+                        try:
+                            tips = ai.teacher_tips(self.llm, stats, text, self.s.llm.max_context_chars) + tips[:2]
+                        except Exception as exc:  # noqa: BLE001 - sem IA o relatorio sai com as dicas automaticas
+                            log.warning("dicas da IA falharam", extra={"error": str(exc)})
+                    r["tips"] = tips
+                    doc_dir = dirs["documentos"]
+                    (doc_dir / "relatorio-professor.json").write_text(
+                        json.dumps(r, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+                    page = doc_dir / "Relatorio-do-Professor.html"
+                    page.write_text(report.render_html(r, name), encoding="utf-8")
+                    return {"relatorio_professor": str(page), "relatorio_professor_json":
+                            str(doc_dir / "relatorio-professor.json")}
+                step("relatorio", _report, required=False)
 
             # 8. Arquivos de legenda (do texto revisado, no tempo do video editado) ----
             def _subs() -> dict[str, str]:
@@ -570,7 +599,7 @@ class Pipeline:
 
     def _active_cuts(self, doc: CaptionDoc) -> list[cleanup.Cut]:
         """Cortes ligados. Com a limpeza desligada, so os cortes manuais feitos no app."""
-        return [c for c in doc.cuts if c.enabled and (self.s.cleanup.enabled or c.kind == "manual")]
+        return [c for c in doc.cuts if c.enabled and (self.s.cleanup.enabled or c.kind in cleanup.USER_KINDS)]
 
     def _edited_doc(self, path: Path) -> CaptionDoc:
         """Legendas no tempo do video editado (sem as palavras cortadas)."""

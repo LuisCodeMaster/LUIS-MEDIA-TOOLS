@@ -26,6 +26,7 @@ def window(tmp_path, monkeypatch):
     w.show()
     app.processEvents()
     yield app, w
+    w.captions.dirty = False  # sem a pergunta "salvar alteracoes?" (travaria o teste)
     w.close()
 
 
@@ -303,6 +304,30 @@ def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video,
     app.sendEvent(ed, QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_L, Qt.KeyboardModifier.NoModifier))
     assert ed.timeline.playhead == pytest.approx(8.0)
 
+    # editar pelo texto: apagar "agora", ver riscado, restaurar, desfazer
+    tr = ed.transcript
+    k = next(i for i, w in enumerate(tr.words) if w.text.strip() == "agora")
+    assert not tr.cut_flags[k]
+    tr.select_words(k, k)
+    assert tr.selected_text() == "agora"
+    tr.setFocus()
+    app.sendEvent(tr, QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier))
+    cut = next(c for c in ed.doc.cuts if c.kind == "texto")
+    assert "agora" in cut.label and ed.transcript.cut_flags[k]
+    assert ed.cuts_list.count() == 5
+    ed.restore_words(k, k)
+    assert not any(c.kind == "texto" for c in ed.doc.cuts) and not ed.transcript.cut_flags[k]
+    ed.undo()
+    assert any(c.kind == "texto" for c in ed.doc.cuts)
+    ed.undo()
+    assert not any(c.kind == "texto" for c in ed.doc.cuts)
+    # o "éé..." cortado aparece riscado no texto; clicar numa palavra leva o video ate ela
+    assert tr.cut_flags[next(i for i, w in enumerate(tr.words) if w.text.startswith("éé"))]
+    tr.seek_requested.emit(tr.words[3].start)
+    assert ed.timeline.playhead == pytest.approx(tr.words[3].start)
+    ed.find_retakes()
+    assert "Nenhuma" in ed.msg.text()
+
     # ritmo e sincronia (com desfazer)
     n0, t0 = len(ed.doc.captions), ed.doc.captions[-1].start
     ed.set_pace("rapido")
@@ -321,6 +346,7 @@ def test_home_one_step_flow_with_timeline_review(window, tmp_path, lesson_video,
     assert w.stack.currentWidget() is home
     assert pump(app, lambda: home.btn_open.isVisibleTo(w), 120), home.r_msg.text()
     assert "Pronto" in home.r_title.text()
+    assert home.btn_report.isVisibleTo(w) and "palavras/min" in home.r_stage.text()
     final = home._final_video()
     from luismedia.adapters import ffmpeg as ff
 
