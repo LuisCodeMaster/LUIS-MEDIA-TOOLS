@@ -45,7 +45,7 @@ from ..core.logging import get_logger
 from ..core.models import MediaInfo, SlideFrame, Transcript, Word
 from ..core.segmentation import SegmentationRules, segment_transcript, segment_words
 from ..core.style import emoji_plan, write_styled_ass
-from ..core.sync import rules_for_pace, snap_to_speech
+from ..core.sync import rules_for_pace, snap, speech_regions
 from ..stages import ai, editorial, media
 
 log = get_logger("pipeline")
@@ -431,18 +431,33 @@ class Pipeline:
                 (leg / f"{name}.transcript.json").write_text(tr.model_dump_json(indent=2), encoding="utf-8")
                 caps = segment_transcript(tr.segments, self.rules)
                 res: dict[str, str] = {}
-                try:  # volume do audio: encaixe na voz, checagem de pausas e onda da linha do tempo
-                    env = cleanup.read_envelope_wav(Path(result.outputs["audio_bruto"]))
+                wav = Path(result.outputs["audio_bruto"])
+                env: list[float] | None = None
+                regions: list = []
+                synced = False
+                try:  # volume do audio: checagem de pausas e onda da linha do tempo
+                    env = cleanup.read_envelope_wav(wav)
                     envp = dirs["audio"] / f"{name}.envelope.json"
                     envp.write_text(json.dumps({"rate": 50, "rms": env}), encoding="utf-8")
                     res["envelope"] = str(envp)
-                    if self.s.subtitles.snap_to_speech:
-                        caps = snap_to_speech(caps, env)
                 except (ImportError, OSError, EOFError) as exc:
                     log.warning("sem envelope de audio", extra={"error": str(exc)})
+                try:  # detector de voz: onde a fala comeca de verdade (funciona com musica de fundo)
+                    from ..adapters.whisper import load_audio
+
+                    regions = speech_regions(load_audio(wav))
+                    if regions:
+                        sp = dirs["audio"] / f"{name}.speech.json"
+                        sp.write_text(json.dumps({"regions": regions}), encoding="utf-8")
+                        res["voz"] = str(sp)
+                except Exception as exc:  # noqa: BLE001 - sem detector, encaixa pelo volume
+                    log.warning("detector de voz indisponivel", extra={"error": str(exc)})
+                if self.s.subtitles.snap_to_speech and (regions or env):
+                    caps = snap(caps, regions, env)
+                    synced = True
                 doc = CaptionDoc(video=str(target.path), width=target.width or 1920,
                                  height=target.height or 1080, duration=target.duration, captions=caps,
-                                 pace=self.s.subtitles.pace, av_offset=target.audio_offset)
+                                 pace=self.s.subtitles.pace, av_offset=target.audio_offset, voice_sync=synced)
                 apply_to_doc(doc, self.s.subtitles.replacements)
                 return {"transcript": str(leg / f"{name}.transcript.json"),
                         "captions": str(doc.save(leg / f"{name}.captions.json")), **res}
